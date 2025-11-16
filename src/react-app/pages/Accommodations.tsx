@@ -140,7 +140,7 @@ export default function Accommodations() {
         )}
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
         <table className="w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
