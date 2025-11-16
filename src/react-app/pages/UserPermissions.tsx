@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Shield, Save, ArrowLeft } from "lucide-react";
+import { Shield, Save, ArrowLeft, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router";
 
 type PermRow = { page: string; can_view: boolean; can_create: boolean; can_update: boolean; can_delete: boolean };
@@ -29,12 +29,14 @@ export default function UserPermissionsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
 
   useEffect(() => {
     const loadUsers = async () => {
       const { data } = await supabase
         .from("users")
         .select("id, name, username")
+        .eq("is_super_user", false)
         .eq("is_active", true)
         .order("name");
       setUsers(Array.isArray(data) ? (data as UserLite[]) : []);
@@ -102,7 +104,12 @@ export default function UserPermissionsPage() {
         is_active: true,
       }));
       const { error } = await supabase.from("user_permissions").upsert(rows, { onConflict: "user_id,page" });
-      if (error) setError(error.message || "Falha ao salvar");
+      if (error) {
+        setError(error.message || "Falha ao salvar");
+      } else {
+        setToastVisible(true);
+        setTimeout(() => setToastVisible(false), 3000);
+      }
     } finally {
       setSaving(false);
     }
@@ -110,6 +117,14 @@ export default function UserPermissionsPage() {
 
   return (
     <div className="space-y-6">
+      {toastVisible && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="flex items-center gap-2 px-4 py-3 bg-slate-900/90 border border-green-500/40 text-green-300 rounded-lg shadow-xl">
+            <CheckCircle className="w-5 h-5" />
+            <span>Permissões atualizadas com sucesso</span>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Regras de Usuário</h1>

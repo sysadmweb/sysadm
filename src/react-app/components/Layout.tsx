@@ -66,9 +66,9 @@ export default function Layout() {
       <aside className="hidden md:block fixed top-0 left-0 h-full w-64 bg-slate-900/50 backdrop-blur-xl border-r border-slate-700/50 shadow-2xl">
         <div className="p-6 border-b border-slate-700/50">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-            WorkSpace
+            SysADM
           </h1>
-          <p className="text-sm text-slate-400 mt-1">Gestão de Alojamentos</p>
+          <p className="text-sm text-slate-400 mt-1">Gestão Administrativa</p>
         </div>
 
         <nav className="p-4 space-y-2">

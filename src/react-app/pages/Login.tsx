@@ -37,9 +37,9 @@ export default function Login() {
         <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-700/50 p-8">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
-              WorkSpace
+              SysADM
             </h1>
-            <p className="text-slate-400">Sistema de Gestão de Alojamentos</p>
+            <p className="text-slate-400">Sistema de Gestão Administrativa</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
