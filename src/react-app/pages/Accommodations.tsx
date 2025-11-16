@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Accommodation, Unit } from "@/shared/types";
+import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, Home } from "lucide-react";
+import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Accommodations() {
+  const perms = usePagePermissions("accommodations");
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,15 +23,18 @@ export default function Accommodations() {
 
   const fetchAccommodations = async () => {
     try {
-      const response = await fetch("/api/accommodations", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("accommodations")
+        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setAccommodations([]);
         return;
       }
-      const data = (await response.json()) as { accommodations: Accommodation[] };
-      setAccommodations(Array.isArray(data.accommodations) ? data.accommodations : []);
-    } catch (error) {
-      console.error("Error fetching accommodations:", error);
+      setAccommodations(data as Accommodation[]);
+    } catch {
+      setAccommodations([]);
     } finally {
       setIsLoading(false);
     }
@@ -36,15 +42,18 @@ export default function Accommodations() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setUnits([]);
         return;
       }
-      const data = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(data.units) ? data.units : []);
-    } catch (error) {
-      console.error("Error fetching units:", error);
+      setUnits(data as Unit[]);
+    } catch {
+      setUnits([]);
     }
   };
 
@@ -53,19 +62,16 @@ export default function Accommodations() {
 
     try {
       if (editingAccommodation) {
-        await fetch(`/api/accommodations/${editingAccommodation.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("accommodations")
+          .update({ name: formData.name, unit_id: formData.unit_id })
+          .eq("id", editingAccommodation.id);
+        if (error) throw error;
       } else {
-        await fetch("/api/accommodations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("accommodations")
+          .insert({ name: formData.name, unit_id: formData.unit_id, is_active: true });
+        if (error) throw error;
       }
 
       setShowModal(false);
@@ -81,10 +87,11 @@ export default function Accommodations() {
     if (!confirm("Tem certeza que deseja desativar este alojamento?")) return;
 
     try {
-      await fetch(`/api/accommodations/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      const { error } = await supabase
+        .from("accommodations")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) throw error;
       fetchAccommodations();
     } catch (error) {
       console.error("Error deleting accommodation:", error);
@@ -108,6 +115,9 @@ export default function Accommodations() {
     );
   }
 
+  if (!perms.can_view) {
+    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -115,6 +125,7 @@ export default function Accommodations() {
           <h1 className="text-3xl font-bold text-slate-100">Alojamentos</h1>
           <p className="text-slate-400 mt-1">Gerencie os alojamentos das unidades</p>
         </div>
+        {perms.can_create && (
         <button
           onClick={() => {
             setEditingAccommodation(null);
@@ -126,6 +137,7 @@ export default function Accommodations() {
           <Plus className="w-5 h-5" />
           Novo Alojamento
         </button>
+        )}
       </div>
 
       <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
@@ -155,18 +167,22 @@ export default function Accommodations() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
+                    {perms.can_update && (
                     <button
                       onClick={() => openEditModal(accommodation)}
                       className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
+                    )}
+                    {perms.can_delete && (
                     <button
                       onClick={() => handleDelete(accommodation.id)}
                       className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
+                    )}
                   </div>
                 </td>
               </tr>

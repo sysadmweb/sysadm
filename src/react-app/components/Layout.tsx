@@ -1,6 +1,8 @@
 import { Outlet, NavLink, useNavigate } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { useEffect, useState } from "react";
+import { supabase } from "@/react-app/supabase";
+import { usePermissions } from "@/react-app/hooks/usePermissions";
 import {
   LayoutDashboard,
   Users,
@@ -10,29 +12,34 @@ import {
   Bed,
   UserCircle,
   LogOut,
+  User,
+  UserLock,
 } from "lucide-react";
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [dbStatus, setDbStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const { get } = usePermissions();
 
   useEffect(() => {
-    fetch("/api/health", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setDbStatus({ ok: d.ok, message: d.message }))
-      .catch(() => setDbStatus({ ok: false, message: "Sem conexão" }));
+    const check = async () => {
+      const { error } = await supabase.from("units").select("id", { head: true }).limit(1);
+      setDbStatus({ ok: !error, message: !error ? "Conexão ativa" : "Sem conexão" });
+    };
+    check();
   }, []);
 
   const navItems = [
-    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { path: "/employees", icon: UserCircle, label: "Funcionários" },
-    { path: "/accommodations", icon: Home, label: "Alojamentos" },
-    { path: "/rooms", icon: Bed, label: "Quartos" },
-    { path: "/functions", icon: Briefcase, label: "Funções" },
-    ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades" }] : []),
-    ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários" }] : []),
-  ];
+    { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
+    { path: "/employees", icon: UserCircle, label: "Funcionários", key: "employees" },
+    { path: "/accommodations", icon: Home, label: "Alojamentos", key: "accommodations" },
+    { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
+    { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
+    ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades", key: "units" }] : []),
+    ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários", key: "users" }] : []),
+    ...(user?.is_super_user ? [{ path: "/permissions", icon: UserLock, label: "Regras", key: "permissions" }] : []),
+  ].filter((item) => get(item.key).can_view);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">

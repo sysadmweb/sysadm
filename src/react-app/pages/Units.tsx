@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Unit } from "@/shared/types";
+import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, Building2 } from "lucide-react";
+import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Units() {
+  const perms = usePagePermissions("units");
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -16,15 +19,18 @@ export default function Units() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setUnits([]);
         return;
       }
-      const data = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(data.units) ? data.units : []);
-    } catch (error) {
-      console.error("Error fetching units:", error);
+      setUnits(data as Unit[]);
+    } catch {
+      setUnits([]);
     } finally {
       setIsLoading(false);
     }
@@ -34,33 +40,23 @@ export default function Units() {
     e.preventDefault();
     setError("");
     try {
-      let response: Response;
       if (editingUnit) {
-        response = await fetch(`/api/units/${editingUnit.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
-      } else {
-        response = await fetch("/api/units", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
-      }
-      if (!response.ok) {
-        try {
-          const errJson = await response.json();
-          setError(errJson.error || "Erro ao salvar unidade");
-        } catch {
-          try {
-            const errText = await response.text();
-            setError(errText || "Erro ao salvar unidade");
-          } catch { void 0; }
+        const { error } = await supabase
+          .from("units")
+          .update({ name: formData.name })
+          .eq("id", editingUnit.id);
+        if (error) {
+          setError(error.message || "Erro ao salvar unidade");
+          return;
         }
-        return;
+      } else {
+        const { error } = await supabase
+          .from("units")
+          .insert({ name: formData.name, is_active: true });
+        if (error) {
+          setError(error.message || "Erro ao salvar unidade");
+          return;
+        }
       }
       setShowModal(false);
       setEditingUnit(null);
@@ -74,20 +70,12 @@ export default function Units() {
   const handleDelete = async (id: number) => {
     if (!confirm("Tem certeza que deseja desativar esta unidade?")) return;
     try {
-      const response = await fetch(`/api/units/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        try {
-          const errJson = await response.json();
-          alert(errJson.error || "Erro ao desativar unidade");
-        } catch {
-          try {
-            const errText = await response.text();
-            alert(errText || "Erro ao desativar unidade");
-          } catch { void 0; }
-        }
+      const { error } = await supabase
+        .from("units")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        alert(error.message || "Erro ao desativar unidade");
         return;
       }
       fetchUnits();
@@ -110,6 +98,9 @@ export default function Units() {
     );
   }
 
+  if (!perms.can_view) {
+    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,6 +108,7 @@ export default function Units() {
           <h1 className="text-3xl font-bold text-slate-100">Unidades</h1>
           <p className="text-slate-400 mt-1">Gerencie as unidades do sistema</p>
         </div>
+        {perms.can_create && (
         <button
           onClick={() => {
             setEditingUnit(null);
@@ -128,6 +120,7 @@ export default function Units() {
           <Plus className="w-5 h-5" />
           Nova Unidade
         </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -141,18 +134,22 @@ export default function Units() {
                 <Building2 className="w-6 h-6 text-blue-400" />
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => openEditModal(unit)}
-                  className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(unit.id)}
-                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                    {perms.can_update && (
+                    <button
+                      onClick={() => openEditModal(unit)}
+                      className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    )}
+                    {perms.can_delete && (
+                    <button
+                      onClick={() => handleDelete(unit.id)}
+                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    )}
               </div>
             </div>
             <h3 className="text-xl font-semibold text-slate-100 mb-2">{unit.name}</h3>

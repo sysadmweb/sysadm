@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
+import { supabase } from "@/react-app/supabase";
+import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 import { Users, Bed, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 export default function Dashboard() {
+  const perms = usePagePermissions("dashboard");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -12,27 +15,57 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch("/api/dashboard/stats", { credentials: "include" });
-      if (!response.ok) {
-        setStats({
-          total_employees: 0,
-          active_employees: 0,
-          total_beds: 0,
-          occupied_beds: 0,
-          available_beds: 0,
-          employees_by_function: [],
-        });
-        return;
-      }
-      const data = (await response.json()) as { stats: DashboardStats };
-      setStats(data?.stats || null);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
+      type RoomLite = { id: number; bed_count: number };
+      type EmployeeLite = { id: number; function_id: number | null; room_id: number | null; is_active: boolean };
+      type FunctionLite = { id: number; name: string };
+
+      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: rooms }, { data: employees }, { data: functions }] = await Promise.all([
+        supabase.from("employees").select("id", { count: "exact", head: true }),
+        supabase.from("employees").select("id").eq("is_active", true),
+        supabase.from("rooms").select("id, bed_count"),
+        supabase.from("employees").select("id, function_id, room_id, is_active"),
+        supabase.from("functions").select("id, name"),
+      ]);
+
+      const roomsList = Array.isArray(rooms) ? (rooms as RoomLite[]) : [];
+      const employeesList = Array.isArray(employees) ? (employees as EmployeeLite[]) : [];
+      const functionsList = Array.isArray(functions) ? (functions as FunctionLite[]) : [];
+
+      const total_beds = roomsList.reduce((sum, r) => sum + r.bed_count, 0);
+      const occupied_beds = employeesList.filter((e) => e.is_active && e.room_id != null).length;
+      const available_beds = Math.max(total_beds - occupied_beds, 0);
+      const active_employees = Array.isArray(activeEmployeesRows) ? activeEmployeesRows.length : 0;
+
+      const employees_by_function = functionsList.map((f) => ({
+        function_name: f.name,
+        count: employeesList.filter((e) => e.function_id === f.id && e.is_active).length,
+      }));
+
+      setStats({
+        total_employees: totalEmployees ?? 0,
+        active_employees,
+        total_beds,
+        occupied_beds,
+        available_beds,
+        employees_by_function,
+      });
+    } catch {
+      setStats({
+        total_employees: 0,
+        active_employees: 0,
+        total_beds: 0,
+        occupied_beds: 0,
+        available_beds: 0,
+        employees_by_function: [],
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
+  if (!perms.can_view) {
+    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
+  }
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">

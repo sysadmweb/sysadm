@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User } from "@/shared/types";
+import * as bcrypt from "bcryptjs";
+import { supabase } from "@/react-app/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -17,13 +19,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch("/api/auth/me", {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
+      const raw = localStorage.getItem("session_user");
+      if (raw) {
+        const parsed = JSON.parse(raw) as User;
+        setUser(parsed);
       } else {
         setUser(null);
       }
@@ -35,36 +34,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      let message = "Login failed";
-      try {
-        const errJson = await response.json();
-        message = errJson.error || message;
-      } catch {
-        try {
-          const errText = await response.text();
-          message = errText || message;
-        } catch { void 0; }
-      }
-      throw new Error(message);
+    const { data: userRow, error } = await supabase
+      .from("users")
+      .select("id, username, password_hash, name, is_super_user, unit_id, is_active, created_at, updated_at")
+      .eq("username", username)
+      .eq("is_active", true)
+      .single();
+    if (error || !userRow) {
+      throw new Error("Credenciais inválidas");
     }
-
-    const data = (await response.json()) as { user: User };
-    setUser(data.user);
+    const isValid = await bcrypt.compare(password, userRow.password_hash as string);
+    if (!isValid) {
+      throw new Error("Credenciais inválidas");
+    }
+    const userData: User = {
+      id: userRow.id as number,
+      username: userRow.username as string,
+      name: userRow.name as string,
+      is_super_user: !!userRow.is_super_user,
+      unit_id: (userRow.unit_id as number | null) ?? null,
+      is_active: !!userRow.is_active,
+      created_at: userRow.created_at as string,
+      updated_at: userRow.updated_at as string,
+    };
+    localStorage.setItem("session_user", JSON.stringify(userData));
+    setUser(userData);
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
+    localStorage.removeItem("session_user");
     setUser(null);
   };
 

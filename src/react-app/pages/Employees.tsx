@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
+import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, UserCircle } from "lucide-react";
+import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Employees() {
+  const perms = usePagePermissions("employees");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -34,15 +37,18 @@ export default function Employees() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("/api/employees", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      if (error || !Array.isArray(data)) {
         setEmployees([]);
         return;
       }
-      const data = (await response.json()) as { employees: Employee[] };
-      setEmployees(Array.isArray(data.employees) ? data.employees : []);
-    } catch (error) {
-      console.error("Error fetching employees:", error);
+      setEmployees(data as Employee[]);
+    } catch {
+      setEmployees([]);
     } finally {
       setIsLoading(false);
     }
@@ -50,57 +56,69 @@ export default function Employees() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setUnits([]);
         return;
       }
-      const unitsData = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(unitsData.units) ? unitsData.units : []);
-    } catch (error) {
-      console.error("Error fetching units:", error);
+      setUnits(data as Unit[]);
+    } catch {
+      setUnits([]);
     }
   };
 
   const fetchAccommodations = async () => {
     try {
-      const response = await fetch("/api/accommodations", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("accommodations")
+        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setAccommodations([]);
         return;
       }
-      const accData = (await response.json()) as { accommodations: Accommodation[] };
-      setAccommodations(Array.isArray(accData.accommodations) ? accData.accommodations : []);
-    } catch (error) {
-      console.error("Error fetching accommodations:", error);
+      setAccommodations(data as Accommodation[]);
+    } catch {
+      setAccommodations([]);
     }
   };
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch("/api/rooms", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("id, name, accommodation_id, bed_count, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setRooms([]);
         return;
       }
-      const roomsData = (await response.json()) as { rooms: Room[] };
-      setRooms(Array.isArray(roomsData.rooms) ? roomsData.rooms : []);
-    } catch (error) {
-      console.error("Error fetching rooms:", error);
+      setRooms(data as Room[]);
+    } catch {
+      setRooms([]);
     }
   };
 
   const fetchFunctions = async () => {
     try {
-      const response = await fetch("/api/functions", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("functions")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setFunctions([]);
         return;
       }
-      const funcData = (await response.json()) as { functions: Function[] };
-      setFunctions(Array.isArray(funcData.functions) ? funcData.functions : []);
-    } catch (error) {
-      console.error("Error fetching functions:", error);
+      setFunctions(data as Function[]);
+    } catch {
+      setFunctions([]);
     }
   };
 
@@ -109,19 +127,39 @@ export default function Employees() {
 
     try {
       if (editingEmployee) {
-        await fetch(`/api/employees/${editingEmployee.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("employees")
+          .update({
+            registration_number: formData.registration_number,
+            full_name: formData.full_name,
+            arrival_date: formData.arrival_date || null,
+            departure_date: formData.departure_date || null,
+            observation: formData.observation || null,
+            unit_id: formData.unit_id,
+            accommodation_id: formData.accommodation_id,
+            room_id: formData.room_id,
+            function_id: formData.function_id,
+            status: formData.status || null,
+          })
+          .eq("id", editingEmployee.id);
+        if (error) throw error;
       } else {
-        await fetch("/api/employees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("employees")
+          .insert({
+            registration_number: formData.registration_number,
+            full_name: formData.full_name,
+            arrival_date: formData.arrival_date || null,
+            departure_date: formData.departure_date || null,
+            observation: formData.observation || null,
+            unit_id: formData.unit_id,
+            accommodation_id: formData.accommodation_id,
+            room_id: formData.room_id,
+            function_id: formData.function_id,
+            status: formData.status || null,
+            is_active: true,
+          });
+        if (error) throw error;
       }
 
       setShowModal(false);
@@ -137,10 +175,11 @@ export default function Employees() {
     if (!confirm("Tem certeza que deseja desativar este funcionário?")) return;
 
     try {
-      await fetch(`/api/employees/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      const { error } = await supabase
+        .from("employees")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) throw error;
       fetchEmployees();
     } catch (error) {
       console.error("Error deleting employee:", error);
@@ -204,6 +243,11 @@ export default function Employees() {
     );
   }
 
+  if (!perms.can_view) {
+    return (
+      <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>
+    );
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -211,6 +255,7 @@ export default function Employees() {
           <h1 className="text-3xl font-bold text-slate-100">Funcionários</h1>
           <p className="text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
+        {perms.can_create && (
         <button
           onClick={() => {
             setEditingEmployee(null);
@@ -222,6 +267,7 @@ export default function Employees() {
           <Plus className="w-5 h-5" />
           Novo Funcionário
         </button>
+        )}
       </div>
 
       <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
@@ -270,18 +316,22 @@ export default function Employees() {
                   <td className="px-6 py-4 text-slate-300">{employee.status || "-"}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
+                      {perms.can_update && (
                       <button
                         onClick={() => openEditModal(employee)}
                         className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
+                      )}
+                      {perms.can_delete && (
                       <button
                         onClick={() => handleDelete(employee.id)}
                         className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      )}
                     </div>
                   </td>
                 </tr>

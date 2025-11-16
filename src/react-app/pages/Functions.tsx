@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Function } from "@/shared/types";
+import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, Briefcase } from "lucide-react";
+import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Functions() {
+  const perms = usePagePermissions("functions");
   const [functions, setFunctions] = useState<Function[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -15,15 +18,18 @@ export default function Functions() {
 
   const fetchFunctions = async () => {
     try {
-      const response = await fetch("/api/functions", { credentials: "include" });
-      if (!response.ok) {
+      const { data, error } = await supabase
+        .from("functions")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .order("name");
+      if (error || !Array.isArray(data)) {
         setFunctions([]);
         return;
       }
-      const data = (await response.json()) as { functions: Function[] };
-      setFunctions(Array.isArray(data.functions) ? data.functions : []);
-    } catch (error) {
-      console.error("Error fetching functions:", error);
+      setFunctions(data as Function[]);
+    } catch {
+      setFunctions([]);
     } finally {
       setIsLoading(false);
     }
@@ -34,19 +40,16 @@ export default function Functions() {
 
     try {
       if (editingFunction) {
-        await fetch(`/api/functions/${editingFunction.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("functions")
+          .update({ name: formData.name })
+          .eq("id", editingFunction.id);
+        if (error) throw error;
       } else {
-        await fetch("/api/functions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(formData),
-        });
+        const { error } = await supabase
+          .from("functions")
+          .insert({ name: formData.name, is_active: true });
+        if (error) throw error;
       }
 
       setShowModal(false);
@@ -62,10 +65,11 @@ export default function Functions() {
     if (!confirm("Tem certeza que deseja desativar esta função?")) return;
 
     try {
-      await fetch(`/api/functions/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
+      const { error } = await supabase
+        .from("functions")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) throw error;
       fetchFunctions();
     } catch (error) {
       console.error("Error deleting function:", error);
@@ -86,6 +90,9 @@ export default function Functions() {
     );
   }
 
+  if (!perms.can_view) {
+    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -93,6 +100,7 @@ export default function Functions() {
           <h1 className="text-3xl font-bold text-slate-100">Funções</h1>
           <p className="text-slate-400 mt-1">Gerencie as funções dos funcionários</p>
         </div>
+        {perms.can_create && (
         <button
           onClick={() => {
             setEditingFunction(null);
@@ -104,6 +112,7 @@ export default function Functions() {
           <Plus className="w-5 h-5" />
           Nova Função
         </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -117,18 +126,22 @@ export default function Functions() {
                 <Briefcase className="w-6 h-6 text-purple-400" />
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => openEditModal(func)}
-                  className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(func.id)}
-                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                    {perms.can_update && (
+                    <button
+                      onClick={() => openEditModal(func)}
+                      className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    )}
+                    {perms.can_delete && (
+                    <button
+                      onClick={() => handleDelete(func.id)}
+                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    )}
               </div>
             </div>
             <h3 className="text-xl font-semibold text-slate-100 mb-2">{func.name}</h3>
