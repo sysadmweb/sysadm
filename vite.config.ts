@@ -1,17 +1,24 @@
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { cloudflare } from "@cloudflare/vite-plugin";
-import { mochaPlugins } from "@getmocha/vite-plugins";
 
 export default defineConfig({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  plugins: [...mochaPlugins(process.env as any), react(), cloudflare()],
+  plugins: [
+    react(),
+  ],
   server: {
     allowedHosts: true,
+    proxy: {
+      "/api": "http://localhost:8787",
+    },
   },
   build: {
+    outDir: "dist",           // saída padrão para Vercel
+    emptyOutDir: true,
     chunkSizeWarningLimit: 5000,
+    rollupOptions: {
+      input: path.resolve(__dirname, "index.html"),
+    },
   },
   resolve: {
     alias: {

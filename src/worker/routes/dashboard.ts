@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { User } from "@/shared/types";
+import { User } from "../../shared/types";
 import { authMiddleware } from "../middleware/auth";
-import { createSupabase } from "@/worker/lib/supabase";
+import { createSupabase } from "../lib/supabase";
 
 type Variables = {
   user: User;

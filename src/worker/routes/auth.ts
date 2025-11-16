@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
 import * as bcrypt from "bcryptjs";
-import { LoginSchema, User } from "@/shared/types";
+import { LoginSchema, User } from "../../shared/types";
 import { authMiddleware, SESSION_COOKIE_NAME } from "../middleware/auth";
-import { createSupabase } from "@/worker/lib/supabase";
+import { createSupabase } from "../lib/supabase";
 
 type Variables = {
   user: User;

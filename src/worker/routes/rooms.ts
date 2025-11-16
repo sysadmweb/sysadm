@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { CreateRoomSchema, UpdateRoomSchema, User } from "@/shared/types";
+import { CreateRoomSchema, UpdateRoomSchema, User } from "../../shared/types";
 import { authMiddleware, logAudit } from "../middleware/auth";
-import { createSupabase } from "@/worker/lib/supabase";
+import { createSupabase } from "../lib/supabase";
 
 type Variables = {
   user: User;

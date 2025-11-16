@@ -1,7 +1,7 @@
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
-import { User } from "@/shared/types";
-import { createSupabase } from "@/worker/lib/supabase";
+import { User } from "../../shared/types";
+import { createSupabase } from "../lib/supabase";
 
 export const SESSION_COOKIE_NAME = "session_token";
 

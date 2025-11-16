@@ -120,7 +120,7 @@ export default function Rooms() {
         <button
           onClick={() => {
             setEditingRoom(null);
-            setFormData({ accommodation_id: accommodations[0]?.id || 0, bed_count: 1 });
+            setFormData({name:"", accommodation_id: accommodations[0]?.id || 0, bed_count: 1 });
             setShowModal(true);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
