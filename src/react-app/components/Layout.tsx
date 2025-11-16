@@ -12,7 +12,6 @@ import {
   Bed,
   UserCircle,
   LogOut,
-  User,
   UserLock,
 } from "lucide-react";
 
