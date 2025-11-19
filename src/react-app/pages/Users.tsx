@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { User, Unit } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
+import * as bcrypt from "bcryptjs";
 import { supabase } from "@/react-app/supabase";
 
 export default function Users() {
@@ -26,6 +27,8 @@ export default function Users() {
     setToast({ text, kind });
     setTimeout(() => setToast(null), 3000);
   };
+
+  const hashPassword = async (pwd: string) => bcrypt.hash(pwd, 10);
 
   useEffect(() => {
     fetchUsers();
@@ -126,9 +129,17 @@ export default function Users() {
             body: JSON.stringify({ new_password: formData.password }),
           });
           if (!res2.ok) {
-            const errText = await res2.text();
-            setError(errText || "Falha ao salvar");
-            return;
+            const pwHash = await hashPassword(formData.password);
+            const { error } = await supabase
+              .from("users")
+              .update({ password_hash: pwHash })
+              .eq("id", editingUser.id);
+            if (error) {
+              const errText = await res2.text();
+              setError(errText || "Falha ao salvar");
+              showToast("Falha ao alterar senha", "error");
+              return;
+            }
           }
         }
       } else {
@@ -147,11 +158,12 @@ export default function Users() {
         });
         if (!res.ok) {
           const errText = await res.text();
+          const pwHash = payload.password ? await hashPassword(payload.password) : "";
           const { error } = await supabase
             .from("users")
             .insert({
               username: payload.username,
-              password_hash: "",
+              password_hash: pwHash,
               name: payload.name,
               unit_id: formData.unit_id,
               is_super_user: !!formData.is_super_user,
