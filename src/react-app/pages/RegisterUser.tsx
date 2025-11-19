@@ -3,8 +3,6 @@ import { useNavigate } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Unit } from "@/shared/types";
 import { Shield, User as UserIcon, ArrowLeft } from "lucide-react";
-import { supabase } from "@/react-app/supabase";
-import * as bcrypt from "bcryptjs";
 
 export default function RegisterUser() {
   const { user: currentUser } = useAuth();
@@ -22,14 +20,13 @@ export default function RegisterUser() {
 
   useEffect(() => {
     const fetchUnits = async () => {
-      const { data, error } = await supabase
-        .from("units")
-        .select("id, name, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (!error && Array.isArray(data)) {
-        setUnits(data as Unit[]);
-      }
+      try {
+        const response = await fetch("/api/units", { credentials: "include" });
+        if (response.ok) {
+          const data = (await response.json()) as { units: Unit[] };
+          setUnits(data.units);
+        }
+      } catch { void 0; }
     };
     fetchUnits();
   }, []);
@@ -50,19 +47,20 @@ export default function RegisterUser() {
         setError("A senha deve ter pelo menos 4 caracteres");
         return;
       }
-      const passwordHash = await bcrypt.hash(payload.password, 10);
-      const { error } = await supabase
-        .from("users")
-        .insert({
-          username: payload.username,
-          password_hash: passwordHash,
-          name: payload.name,
-          unit_id: payload.unit_id,
-          is_super_user: payload.is_super_user,
-          is_active: true,
-        });
-      if (error) {
-        setError(error.message || "Falha ao salvar");
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        try {
+          const errJson = await response.json();
+          setError(errJson.error || "Falha ao salvar");
+        } catch {
+          const errText = await response.text();
+          setError(errText || "Falha ao salvar");
+        }
         return;
       }
       navigate("/users");

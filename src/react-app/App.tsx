@@ -9,7 +9,6 @@ import FunctionsPage from "@/react-app/pages/Functions";
 import AccommodationsPage from "@/react-app/pages/Accommodations";
 import RoomsPage from "@/react-app/pages/Rooms";
 import EmployeesPage from "@/react-app/pages/Employees";
-import UserPermissionsPage from "@/react-app/pages/UserPermissions";
 import Layout from "@/react-app/components/Layout";
 import ProtectedRoute from "@/react-app/components/ProtectedRoute";
 
@@ -36,7 +35,6 @@ export default function App() {
             <Route path="accommodations" element={<AccommodationsPage />} />
             <Route path="rooms" element={<RoomsPage />} />
             <Route path="employees" element={<EmployeesPage />} />
-            <Route path="permissions" element={<UserPermissionsPage />} />
           </Route>
         </Routes>
       </Router>

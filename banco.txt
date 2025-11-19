@@ -1,1 +1,146 @@
-C
+CREATE TABLE public.units (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.functions (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.accommodations (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  unit_id BIGINT NOT NULL REFERENCES public.units(id) ON DELETE RESTRICT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.rooms (
+  id BIGSERIAL PRIMARY KEY,
+  accommodation_id BIGINT NOT NULL REFERENCES public.accommodations(id) ON DELETE RESTRICT,
+  bed_count INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.employees (
+  id BIGSERIAL PRIMARY KEY,
+  registration_number TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  arrival_date DATE,
+  departure_date DATE,
+  observation TEXT,
+  unit_id BIGINT NOT NULL REFERENCES public.units(id) ON DELETE RESTRICT,
+  accommodation_id BIGINT REFERENCES public.accommodations(id) ON DELETE SET NULL,
+  room_id BIGINT REFERENCES public.rooms(id) ON DELETE SET NULL,
+  function_id BIGINT REFERENCES public.functions(id) ON DELETE SET NULL,
+  status TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  unit_id BIGINT REFERENCES public.units(id) ON DELETE SET NULL,
+  is_super_user BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE public.sessions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  token UUID NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE public.audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+  table_name TEXT NOT NULL,
+  record_id BIGINT NOT NULL,
+  operation TEXT NOT NULL,
+  old_data JSONB,
+  new_data JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER set_units_updated_at
+BEFORE UPDATE ON public.units
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER set_functions_updated_at
+BEFORE UPDATE ON public.functions
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER set_accommodations_updated_at
+BEFORE UPDATE ON public.accommodations
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER set_rooms_updated_at
+BEFORE UPDATE ON public.rooms
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER set_employees_updated_at
+BEFORE UPDATE ON public.employees
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER set_users_updated_at
+BEFORE UPDATE ON public.users
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE INDEX employees_unit_id_idx ON public.employees (unit_id);
+CREATE INDEX employees_function_id_idx ON public.employees (function_id);
+CREATE INDEX employees_room_id_idx ON public.employees (room_id);
+CREATE INDEX accommodations_unit_id_idx ON public.accommodations (unit_id);
+CREATE INDEX rooms_accommodation_id_idx ON public.rooms (accommodation_id);
+CREATE INDEX users_unit_id_idx ON public.users (unit_id);
+CREATE INDEX sessions_expires_at_idx ON public.sessions (expires_at);
+
+INSERT INTO public.units (name) VALUES ('Unidade 1');
+INSERT INTO public.accommodations (name, unit_id) VALUES ('Alojamento 1', 1);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (1, 4);
+INSERT INTO public.functions (name) VALUES ('Sem função');
+INSERT INTO public.units (name) VALUES ('Unidade 2');
+INSERT INTO public.functions (name) VALUES ('Operacional');
+INSERT INTO public.functions (name) VALUES ('Administrativo');
+INSERT INTO public.functions (name) VALUES ('Gerência');
+INSERT INTO public.functions (name) VALUES ('Segurança');
+INSERT INTO public.accommodations (name, unit_id) VALUES ('Alojamento 2', 1);
+INSERT INTO public.accommodations (name, unit_id) VALUES ('Alojamento 3', 2);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (1, 2);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (1, 6);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (2, 4);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (2, 2);
+INSERT INTO public.rooms (accommodation_id, bed_count) VALUES (3, 3);
+INSERT INTO public.users (username, password_hash, name, unit_id, is_super_user) VALUES ('admin', '$2b$10$f7zvU14KB/8rS3p6jOuHTuiFL3y3Ik7H5MzpJ2D2tZXLtFuiC8xU2', 'Administrador', 1, TRUE);
+INSERT INTO public.users (username, password_hash, name, unit_id, is_super_user) VALUES ('joao', '$2b$10$za9mNRVQUC01OEq3ES/G5eUvNmN703IH1RIPJfKKSfTIbpPUO7GQ2', 'João Silva', 1, FALSE);
+INSERT INTO public.users (username, password_hash, name, unit_id, is_super_user) VALUES ('maria', '$2b$10$za9mNRVQUC01OEq3ES/G5eUvNmN703IH1RIPJfKKSfTIbpPUO7GQ2', 'Maria Souza', 2, FALSE);
+INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0001', 'Carlos Pereira', '2025-01-10', NULL, NULL, 1, 1, 1, NULL, 'Ativo');
+INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0002', 'Ana Lima', '2025-01-12', NULL, NULL, 1, NULL, NULL, NULL, 'Pendente');
+INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0003', 'Rafael Costa', '2025-01-15', NULL, NULL, 2, NULL, NULL, NULL, 'Pendente');

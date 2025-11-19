@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
-import { Users, Bed, CheckCircle, XCircle, Loader2, BedSingleIcon, LucideBadgePoundSterling, BedDouble, BellDot, BedIcon, Circle, User2Icon, UserCheck, HouseIcon, ParkingCircleIcon, CheckCheckIcon, CheckCircle2 } from "lucide-react";
+import { Users, Bed, Loader2, UserCheck, HouseIcon } from "lucide-react";
 
 export default function Dashboard() {
   const perms = usePagePermissions("dashboard");

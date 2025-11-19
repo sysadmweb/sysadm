@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
-import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, UserCircle } from "lucide-react";
-import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Employees() {
-  const perms = usePagePermissions("employees");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -37,18 +34,15 @@ export default function Employees() {
 
   const fetchEmployees = async () => {
     try {
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/employees", { credentials: "include" });
+      if (!response.ok) {
         setEmployees([]);
         return;
       }
-      setEmployees(data as Employee[]);
-    } catch {
-      setEmployees([]);
+      const data = (await response.json()) as { employees: Employee[] };
+      setEmployees(Array.isArray(data.employees) ? data.employees : []);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
     } finally {
       setIsLoading(false);
     }
@@ -56,69 +50,57 @@ export default function Employees() {
 
   const fetchUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from("units")
-        .select("id, name, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/units", { credentials: "include" });
+      if (!response.ok) {
         setUnits([]);
         return;
       }
-      setUnits(data as Unit[]);
-    } catch {
-      setUnits([]);
+      const unitsData = (await response.json()) as { units: Unit[] };
+      setUnits(Array.isArray(unitsData.units) ? unitsData.units : []);
+    } catch (error) {
+      console.error("Error fetching units:", error);
     }
   };
 
   const fetchAccommodations = async () => {
     try {
-      const { data, error } = await supabase
-        .from("accommodations")
-        .select("id, name, unit_id, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/accommodations", { credentials: "include" });
+      if (!response.ok) {
         setAccommodations([]);
         return;
       }
-      setAccommodations(data as Accommodation[]);
-    } catch {
-      setAccommodations([]);
+      const accData = (await response.json()) as { accommodations: Accommodation[] };
+      setAccommodations(Array.isArray(accData.accommodations) ? accData.accommodations : []);
+    } catch (error) {
+      console.error("Error fetching accommodations:", error);
     }
   };
 
   const fetchRooms = async () => {
     try {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("id, name, accommodation_id, bed_count, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/rooms", { credentials: "include" });
+      if (!response.ok) {
         setRooms([]);
         return;
       }
-      setRooms(data as Room[]);
-    } catch {
-      setRooms([]);
+      const roomsData = (await response.json()) as { rooms: Room[] };
+      setRooms(Array.isArray(roomsData.rooms) ? roomsData.rooms : []);
+    } catch (error) {
+      console.error("Error fetching rooms:", error);
     }
   };
 
   const fetchFunctions = async () => {
     try {
-      const { data, error } = await supabase
-        .from("functions")
-        .select("id, name, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/functions", { credentials: "include" });
+      if (!response.ok) {
         setFunctions([]);
         return;
       }
-      setFunctions(data as Function[]);
-    } catch {
-      setFunctions([]);
+      const funcData = (await response.json()) as { functions: Function[] };
+      setFunctions(Array.isArray(funcData.functions) ? funcData.functions : []);
+    } catch (error) {
+      console.error("Error fetching functions:", error);
     }
   };
 
@@ -127,39 +109,19 @@ export default function Employees() {
 
     try {
       if (editingEmployee) {
-        const { error } = await supabase
-          .from("employees")
-          .update({
-            registration_number: formData.registration_number,
-            full_name: formData.full_name,
-            arrival_date: formData.arrival_date || null,
-            departure_date: formData.departure_date || null,
-            observation: formData.observation || null,
-            unit_id: formData.unit_id,
-            accommodation_id: formData.accommodation_id,
-            room_id: formData.room_id,
-            function_id: formData.function_id,
-            status: formData.status || null,
-          })
-          .eq("id", editingEmployee.id);
-        if (error) throw error;
+        await fetch(`/api/employees/${editingEmployee.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        });
       } else {
-        const { error } = await supabase
-          .from("employees")
-          .insert({
-            registration_number: formData.registration_number,
-            full_name: formData.full_name,
-            arrival_date: formData.arrival_date || null,
-            departure_date: formData.departure_date || null,
-            observation: formData.observation || null,
-            unit_id: formData.unit_id,
-            accommodation_id: formData.accommodation_id,
-            room_id: formData.room_id,
-            function_id: formData.function_id,
-            status: formData.status || null,
-            is_active: true,
-          });
-        if (error) throw error;
+        await fetch("/api/employees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        });
       }
 
       setShowModal(false);
@@ -175,11 +137,10 @@ export default function Employees() {
     if (!confirm("Tem certeza que deseja desativar este funcionário?")) return;
 
     try {
-      const { error } = await supabase
-        .from("employees")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) throw error;
+      await fetch(`/api/employees/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
       fetchEmployees();
     } catch (error) {
       console.error("Error deleting employee:", error);
@@ -222,19 +183,6 @@ export default function Employees() {
     ? rooms.filter((r) => r.accommodation_id === formData.accommodation_id)
     : [];
 
-  const occupancy = employees.reduce((map, e) => {
-    if (e.room_id) {
-      map.set(e.room_id, (map.get(e.room_id) || 0) + 1);
-    }
-    return map;
-  }, new Map<number, number>());
-
-  const availableRooms = filteredRooms.filter((room) => {
-    if (editingEmployee && editingEmployee.room_id === room.id) return true;
-    const used = occupancy.get(room.id) || 0;
-    return used < room.bed_count;
-  });
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -243,11 +191,6 @@ export default function Employees() {
     );
   }
 
-  if (!perms.can_view) {
-    return (
-      <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>
-    );
-  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -255,7 +198,6 @@ export default function Employees() {
           <h1 className="text-3xl font-bold text-slate-100">Funcionários</h1>
           <p className="text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
-        {perms.can_create && (
         <button
           onClick={() => {
             setEditingEmployee(null);
@@ -267,10 +209,9 @@ export default function Employees() {
           <Plus className="w-5 h-5" />
           Novo Funcionário
         </button>
-        )}
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700/50">
@@ -307,7 +248,7 @@ export default function Employees() {
                   <td className="px-6 py-4">
                     {employee.room_id ? (
                       <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-sm">
-                        {rooms.find((r) => r.id === employee.room_id)?.name || `Quarto ${employee.room_id}`}
+                        Quarto {employee.room_id}
                       </span>
                     ) : (
                       <span className="text-slate-500 text-sm">Sem quarto</span>
@@ -316,22 +257,18 @@ export default function Employees() {
                   <td className="px-6 py-4 text-slate-300">{employee.status || "-"}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      {perms.can_update && (
                       <button
                         onClick={() => openEditModal(employee)}
                         className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      )}
-                      {perms.can_delete && (
                       <button
                         onClick={() => handleDelete(employee.id)}
                         className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -349,7 +286,7 @@ export default function Employees() {
               {editingEmployee ? "Editar Funcionário" : "Novo Funcionário"}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Matrícula
@@ -378,7 +315,7 @@ export default function Employees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Data de Chegada
@@ -405,7 +342,7 @@ export default function Employees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Unidade
@@ -448,7 +385,7 @@ export default function Employees() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Alojamento
@@ -486,9 +423,9 @@ export default function Employees() {
                     disabled={!formData.accommodation_id}
                   >
                     <option value="">Nenhum</option>
-                    {availableRooms.map((room) => (
+                    {filteredRooms.map((room) => (
                       <option key={room.id} value={room.id}>
-                        {room.name || `Quarto ${room.id}`} ({room.bed_count} cama
+                        Quarto {room.id} ({room.bed_count} cama
                         {room.bed_count > 1 ? "s" : ""})
                       </option>
                     ))}

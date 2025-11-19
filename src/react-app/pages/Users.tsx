@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
 import { User, Unit } from "@/shared/types";
-import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import * as bcrypt from "bcryptjs";
-import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Users() {
   const { user: currentUser } = useAuth();
-  const perms = usePagePermissions("users");
   const [users, setUsers] = useState<User[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,17 +27,16 @@ export default function Users() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id, username, name, is_super_user, unit_id, is_active, created_at, updated_at")
-        .order("created_at", { ascending: false });
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/users", { credentials: "include" });
+      if (!response.ok) {
+        try { await response.text(); } catch { void 0; }
         setUsers([]);
         return;
       }
-      setUsers(data as User[]);
-    } catch {
-      setUsers([]);
+      const data = (await response.json()) as { users: User[] };
+      setUsers(Array.isArray(data.users) ? data.users : []);
+    } catch (error) {
+      console.error("Error fetching users:", error);
     } finally {
       setIsLoading(false);
     }
@@ -49,18 +44,16 @@ export default function Users() {
 
   const fetchUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from("units")
-        .select("id, name, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/units", { credentials: "include" });
+      if (!response.ok) {
+        try { await response.text(); } catch { void 0; }
         setUnits([]);
         return;
       }
-      setUnits(data as Unit[]);
-    } catch {
-      setUnits([]);
+      const data = (await response.json()) as { units: Unit[] };
+      setUnits(Array.isArray(data.units) ? data.units : []);
+    } catch (error) {
+      console.error("Error fetching units:", error);
     }
   };
 
@@ -71,39 +64,58 @@ export default function Users() {
 
     try {
       if (editingUser) {
-        const { error } = await supabase
-          .from("users")
-          .update({ name: formData.name, unit_id: formData.unit_id })
-          .eq("id", editingUser.id);
-        if (error) {
-          setError(error.message || "Falha ao salvar");
+        const res = await fetch(`/api/users/${editingUser.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: formData.name,
+            unit_id: formData.unit_id,
+          }),
+        });
+        if (!res.ok) {
+          try {
+            const errJson = await res.json();
+            setError(errJson.error || "Falha ao salvar");
+          } catch {
+            const errText = await res.text();
+            setError(errText || "Falha ao salvar");
+          }
           return;
         }
         if (currentUser?.is_super_user && formData.password) {
-          const passwordHash = await bcrypt.hash(formData.password, 10);
-          const { error: err2 } = await supabase
-            .from("users")
-            .update({ password_hash: passwordHash })
-            .eq("id", editingUser.id);
-          if (err2) {
-            setError(err2.message || "Falha ao salvar");
+          const res2 = await fetch(`/api/users/${editingUser.id}/reset-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ new_password: formData.password }),
+          });
+          if (!res2.ok) {
+            try {
+              const errJson = await res2.json();
+              setError(errJson.error || "Falha ao salvar");
+            } catch {
+              const errText = await res2.text();
+              setError(errText || "Falha ao salvar");
+            }
             return;
           }
         }
       } else {
-        const passwordHash = await bcrypt.hash(formData.password, 10);
-        const { error } = await supabase
-          .from("users")
-          .insert({
-            username: formData.username,
-            password_hash: passwordHash,
-            name: formData.name,
-            unit_id: formData.unit_id,
-            is_super_user: !!formData.is_super_user,
-            is_active: true,
-          });
-        if (error) {
-          setError(error.message || "Falha ao salvar");
+        const res = await fetch("/api/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        });
+        if (!res.ok) {
+          try {
+            const errJson = await res.json();
+            setError(errJson.error || "Falha ao salvar");
+          } catch {
+            const errText = await res.text();
+            setError(errText || "Falha ao salvar");
+          }
           return;
         }
       }
@@ -125,12 +137,18 @@ export default function Users() {
     if (!confirm("Tem certeza que deseja desativar este usuário?")) return;
 
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) {
-        alert(error.message || "Falha ao desativar usuário");
+      const res = await fetch(`/api/users/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        try {
+          const errJson = await res.json();
+          alert(errJson.error || "Falha ao desativar usuário");
+        } catch {
+          const errText = await res.text();
+          alert(errText || "Falha ao desativar usuário");
+        }
         return;
       }
       fetchUsers();
@@ -159,9 +177,6 @@ export default function Users() {
     );
   }
 
-  if (!perms.can_view) {
-    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
-  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -169,7 +184,6 @@ export default function Users() {
           <h1 className="text-3xl font-bold text-slate-100">Usuários</h1>
           <p className="text-slate-400 mt-1">Gerencie os usuários do sistema</p>
         </div>
-        {perms.can_create && (
         <button
           onClick={() => {
             setEditingUser(null);
@@ -181,10 +195,9 @@ export default function Users() {
           <Plus className="w-5 h-5" />
           Novo Usuário
         </button>
-        )}
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <table className="w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
@@ -220,15 +233,13 @@ export default function Users() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
-                    {perms.can_update && (
                     <button
                       onClick={() => openEditModal(user)}
                       className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    )}
-                    {perms.can_delete && user.id !== currentUser?.id && (
+                    {user.id !== currentUser?.id && (
                       <button
                         onClick={() => handleDelete(user.id)}
                         className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"

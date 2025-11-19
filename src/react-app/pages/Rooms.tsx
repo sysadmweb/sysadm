@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { Room, Accommodation } from "@/shared/types";
-import { supabase } from "@/react-app/supabase";
 import { Plus, Edit, Trash2, Loader2, Bed } from "lucide-react";
-import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 
 export default function Rooms() {
-  const perms = usePagePermissions("rooms");
   const [rooms, setRooms] = useState<Room[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,18 +21,15 @@ export default function Rooms() {
 
   const fetchRooms = async () => {
     try {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("id, name, accommodation_id, bed_count, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/rooms", { credentials: "include" });
+      if (!response.ok) {
         setRooms([]);
         return;
       }
-      setRooms(data as Room[]);
-    } catch {
-      setRooms([]);
+      const data = (await response.json()) as { rooms: Room[] };
+      setRooms(Array.isArray(data.rooms) ? data.rooms : []);
+    } catch (error) {
+      console.error("Error fetching rooms:", error);
     } finally {
       setIsLoading(false);
     }
@@ -43,18 +37,15 @@ export default function Rooms() {
 
   const fetchAccommodations = async () => {
     try {
-      const { data, error } = await supabase
-        .from("accommodations")
-        .select("id, name, unit_id, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .order("name");
-      if (error || !Array.isArray(data)) {
+      const response = await fetch("/api/accommodations", { credentials: "include" });
+      if (!response.ok) {
         setAccommodations([]);
         return;
       }
-      setAccommodations(data as Accommodation[]);
-    } catch {
-      setAccommodations([]);
+      const data = (await response.json()) as { accommodations: Accommodation[] };
+      setAccommodations(Array.isArray(data.accommodations) ? data.accommodations : []);
+    } catch (error) {
+      console.error("Error fetching accommodations:", error);
     }
   };
 
@@ -63,16 +54,19 @@ export default function Rooms() {
 
     try {
       if (editingRoom) {
-        const { error } = await supabase
-          .from("rooms")
-          .update({ name: formData.name, accommodation_id: formData.accommodation_id, bed_count: formData.bed_count })
-          .eq("id", editingRoom.id);
-        if (error) throw error;
+        await fetch(`/api/rooms/${editingRoom.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        });
       } else {
-        const { error } = await supabase
-          .from("rooms")
-          .insert({ name: formData.name, accommodation_id: formData.accommodation_id, bed_count: formData.bed_count, is_active: true });
-        if (error) throw error;
+        await fetch("/api/rooms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(formData),
+        });
       }
 
       setShowModal(false);
@@ -88,11 +82,10 @@ export default function Rooms() {
     if (!confirm("Tem certeza que deseja desativar este quarto?")) return;
 
     try {
-      const { error } = await supabase
-        .from("rooms")
-        .update({ is_active: false })
-        .eq("id", id);
-      if (error) throw error;
+      await fetch(`/api/rooms/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
       fetchRooms();
     } catch (error) {
       console.error("Error deleting room:", error);
@@ -117,9 +110,6 @@ export default function Rooms() {
     );
   }
 
-  if (!perms.can_view) {
-    return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
-  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -127,7 +117,6 @@ export default function Rooms() {
           <h1 className="text-3xl font-bold text-slate-100">Quartos</h1>
           <p className="text-slate-400 mt-1">Gerencie os quartos dos alojamentos</p>
         </div>
-        {perms.can_create && (
         <button
           onClick={() => {
             setEditingRoom(null);
@@ -139,10 +128,9 @@ export default function Rooms() {
           <Plus className="w-5 h-5" />
           Novo Quarto
         </button>
-        )}
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <table className="w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
@@ -175,22 +163,18 @@ export default function Rooms() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
-                    {perms.can_update && (
                     <button
                       onClick={() => openEditModal(room)}
                       className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    )}
-                    {perms.can_delete && (
                     <button
                       onClick={() => handleDelete(room.id)}
                       className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    )}
                   </div>
                 </td>
               </tr>
