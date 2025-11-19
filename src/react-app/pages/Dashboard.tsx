@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
-import { Users, Bed, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Users, Bed, CheckCircle, XCircle, Loader2, BedSingleIcon, LucideBadgePoundSterling, BedDouble, BellDot, BedIcon, Circle, User2Icon, UserCheck, HouseIcon, ParkingCircleIcon, CheckCheckIcon, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
   const perms = usePagePermissions("dashboard");
@@ -75,17 +75,11 @@ export default function Dashboard() {
   }
 
   const statCards = [
-    {
-      label: "Total de Funcionários",
-      value: stats?.total_employees || 0,
-      icon: Users,
-      color: "from-blue-500 to-cyan-500",
-      bgColor: "bg-blue-500/10",
-    },
+ 
     {
       label: "Funcionários Ativos",
       value: stats?.active_employees || 0,
-      icon: CheckCircle,
+      icon: UserCheck,
       color: "from-green-500 to-emerald-500",
       bgColor: "bg-green-500/10",
     },
@@ -97,12 +91,19 @@ export default function Dashboard() {
       bgColor: "bg-purple-500/10",
     },
     {
-      label: "Camas Disponíveis",
+      label: "Vagas Disponíveis",
       value: stats?.available_beds || 0,
-      icon: XCircle,
-      color: "from-orange-500 to-red-500",
-      bgColor: "bg-orange-500/10",
+      icon: HouseIcon,
+      color: "from-gray-500 to-green-500",
+      bgColor: "bg-green-500/10",
     },
+       {
+      label: "Total de Funcionários",
+      value: stats?.total_employees || 0,
+      icon: Users,
+      color: "from-blue-500 to-cyan-500",
+      bgColor: "bg-blue-500/10",
+    }
   ];
 
   return (
@@ -121,7 +122,7 @@ export default function Dashboard() {
           >
             <div className="flex items-center justify-between mb-4">
               <div className={`p-3 rounded-lg ${card.bgColor}`}>
-                <card.icon className={`w-6 h-6 bg-gradient-to-r ${card.color} bg-clip-text text-transparent`} />
+                <card.icon className={`w-6 h-6 bg-gradient-to-r ${card.color} `} />
               </div>
             </div>
             <div>
