@@ -25,30 +25,19 @@ export default function Units() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("units")
-          .select("id, name, is_active, created_at, updated_at");
-        if (!error && Array.isArray(data)) {
-          const list = (data as Unit[]).filter((u) => u.is_active);
-          setUnits(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? list
-              : list.filter((u) => u.id === currentUser.unit_id)
-          );
-        } else {
-          setUnits([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at");
+      if (!error && Array.isArray(data)) {
+        const list = (data as Unit[]).filter((u) => u.is_active);
+        setUnits(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? list
+            : list.filter((u) => u.id === currentUser.unit_id)
+        );
+      } else {
+        setUnits([]);
       }
-      const data = (await response.json()) as { units: Unit[] };
-      const list = Array.isArray(data.units) ? data.units : [];
-      setUnits(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list.filter((u) => u.is_active)
-          : list.filter((u) => u.is_active && u.id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching units:", error);
     } finally {
@@ -60,43 +49,25 @@ export default function Units() {
     e.preventDefault();
     setError("");
     try {
-      let response: Response;
       const payload = { name: formData.name.toUpperCase() };
       if (editingUnit) {
-        response = await fetch(`/api/units/${editingUnit.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
+        const { error } = await supabase
+          .from("units")
+          .update({ name: payload.name })
+          .eq("id", editingUnit.id);
+        if (error) {
+          setError("Erro ao salvar unidade");
+          showToast("Erro ao salvar unidade", "error");
+          return;
+        }
       } else {
-        response = await fetch("/api/units", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-      }
-      if (!response.ok) {
-        if (editingUnit) {
-          const { error } = await supabase
-            .from("units")
-            .update({ name: payload.name })
-            .eq("id", editingUnit.id);
-          if (error) {
-            setError("Erro ao salvar unidade");
-            showToast("Erro ao salvar unidade", "error");
-            return;
-          }
-        } else {
-          const { error } = await supabase
-            .from("units")
-            .insert({ name: payload.name, is_active: true });
-          if (error) {
-            setError("Erro ao salvar unidade");
-            showToast("Erro ao salvar unidade", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("units")
+          .insert({ name: payload.name, is_active: true });
+        if (error) {
+          setError("Erro ao salvar unidade");
+          showToast("Erro ao salvar unidade", "error");
+          return;
         }
       }
       showToast(editingUnit ? "Unidade atualizada" : "Unidade criada", "success");
@@ -113,19 +84,13 @@ export default function Units() {
   const handleDelete = async (id: number) => {
     if (!confirm("Tem certeza que deseja desativar esta unidade?")) return;
     try {
-      const response = await fetch(`/api/units/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        const { error } = await supabase
-          .from("units")
-          .update({ is_active: false })
-          .eq("id", id);
-        if (error) {
-          showToast("Erro ao desativar unidade", "error");
-          return;
-        }
+      const { error } = await supabase
+        .from("units")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Erro ao desativar unidade", "error");
+        return;
       }
       showToast("Unidade desativada", "success");
       fetchUnits();

@@ -30,40 +30,26 @@ export default function Rooms() {
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch("/api/rooms", { credentials: "include" });
-      if (!response.ok) {
-        const { data: accRows } = await supabase
-          .from("accommodations")
-          .select("id")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
-        const { data, error } = await supabase
-          .from("rooms")
-          .select("id, accommodation_id, bed_count, name, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .in("accommodation_id", accIds.length ? accIds : [-1]);
-        if (!error && Array.isArray(data)) {
-          setRooms(data as Room[]);
-        } else {
-          setRooms([]);
-        }
-        return;
+      const { data: accRows } = await supabase
+        .from("accommodations")
+        .select("id")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("id, accommodation_id, bed_count, name, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .in("accommodation_id", accIds.length ? accIds : [-1]);
+      if (!error && Array.isArray(data)) {
+        setRooms(data as Room[]);
+      } else {
+        setRooms([]);
       }
-      const data = (await response.json()) as { rooms: Room[] };
-      const list = Array.isArray(data.rooms) ? data.rooms : [];
-      const allowedAccIds = accommodations
-        .filter((a) => (currentUser?.is_super_user || !currentUser?.unit_id ? true : a.unit_id === currentUser.unit_id))
-        .map((a) => a.id);
-      setRooms(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((r) => allowedAccIds.includes(r.accommodation_id))
-      );
     } catch (error) {
       console.error("Error fetching rooms:", error);
     } finally {
@@ -73,31 +59,20 @@ export default function Rooms() {
 
   const fetchAccommodations = async () => {
     try {
-      const response = await fetch("/api/accommodations", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("accommodations")
-          .select("id, name, unit_id, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        if (!error && Array.isArray(data)) {
-          setAccommodations(data as Accommodation[]);
-        } else {
-          setAccommodations([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("accommodations")
+        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      if (!error && Array.isArray(data)) {
+        setAccommodations(data as Accommodation[]);
+      } else {
+        setAccommodations([]);
       }
-      const data = (await response.json()) as { accommodations: Accommodation[] };
-      const list = Array.isArray(data.accommodations) ? data.accommodations : [];
-      setAccommodations(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((a) => a.unit_id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching accommodations:", error);
     }
@@ -109,38 +84,22 @@ export default function Rooms() {
     try {
       const payload = { ...formData, name: (formData.name || "").toUpperCase() };
       if (editingRoom) {
-        const res = await fetch(`/api/rooms/${editingRoom.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("rooms")
-            .update({ name: payload.name, accommodation_id: payload.accommodation_id, bed_count: payload.bed_count })
-            .eq("id", editingRoom.id);
-          if (error) {
-            showToast("Falha ao salvar quarto", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("rooms")
+          .update({ name: payload.name, accommodation_id: payload.accommodation_id, bed_count: payload.bed_count })
+          .eq("id", editingRoom.id);
+        if (error) {
+          showToast("Falha ao salvar quarto", "error");
+          return;
         }
         showToast("Quarto atualizado com sucesso", "success");
       } else {
-        const res = await fetch("/api/rooms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("rooms")
-            .insert({ name: payload.name, accommodation_id: payload.accommodation_id, bed_count: payload.bed_count, is_active: true });
-          if (error) {
-            showToast("Falha ao cadastrar quarto", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("rooms")
+          .insert({ name: payload.name, accommodation_id: payload.accommodation_id, bed_count: payload.bed_count, is_active: true });
+        if (error) {
+          showToast("Falha ao cadastrar quarto", "error");
+          return;
         }
         showToast("Quarto cadastrado com sucesso", "success");
       }
@@ -159,19 +118,13 @@ export default function Rooms() {
     if (!confirm("Tem certeza que deseja desativar este quarto?")) return;
 
     try {
-      const res = await fetch(`/api/rooms/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const { error } = await supabase
-          .from("rooms")
-          .update({ is_active: false })
-          .eq("id", id);
-        if (error) {
-          showToast("Falha ao desativar quarto", "error");
-          return;
-        }
+      const { error } = await supabase
+        .from("rooms")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Falha ao desativar quarto", "error");
+        return;
       }
       showToast("Quarto desativado", "success");
       fetchRooms();

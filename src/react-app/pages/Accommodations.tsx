@@ -29,31 +29,20 @@ export default function Accommodations() {
 
   const fetchAccommodations = async () => {
     try {
-      const response = await fetch("/api/accommodations", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("accommodations")
-          .select("id, name, unit_id, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        if (!error && Array.isArray(data)) {
-          setAccommodations(data as Accommodation[]);
-        } else {
-          setAccommodations([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("accommodations")
+        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      if (!error && Array.isArray(data)) {
+        setAccommodations(data as Accommodation[]);
+      } else {
+        setAccommodations([]);
       }
-      const data = (await response.json()) as { accommodations: Accommodation[] };
-      const list = Array.isArray(data.accommodations) ? data.accommodations : [];
-      setAccommodations(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((a) => a.unit_id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching accommodations:", error);
     } finally {
@@ -63,30 +52,19 @@ export default function Accommodations() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("units")
-          .select("id, name, is_active, created_at, updated_at");
-        if (!error && Array.isArray(data)) {
-          const list = (data as Unit[]).filter((u) => u.is_active);
-          setUnits(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? list
-              : list.filter((u) => u.id === currentUser.unit_id)
-          );
-        } else {
-          setUnits([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at");
+      if (!error && Array.isArray(data)) {
+        const list = (data as Unit[]).filter((u) => u.is_active);
+        setUnits(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? list
+            : list.filter((u) => u.id === currentUser.unit_id)
+        );
+      } else {
+        setUnits([]);
       }
-      const data = (await response.json()) as { units: Unit[] };
-      const list = Array.isArray(data.units) ? data.units : [];
-      setUnits(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((u) => u.id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching units:", error);
     }
@@ -98,38 +76,22 @@ export default function Accommodations() {
     try {
       const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id };
       if (editingAccommodation) {
-        const res = await fetch(`/api/accommodations/${editingAccommodation.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("accommodations")
-            .update({ name: payload.name, unit_id: payload.unit_id })
-            .eq("id", editingAccommodation.id);
-          if (error) {
-            showToast("Falha ao salvar alojamento", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("accommodations")
+          .update({ name: payload.name, unit_id: payload.unit_id })
+          .eq("id", editingAccommodation.id);
+        if (error) {
+          showToast("Falha ao salvar alojamento", "error");
+          return;
         }
         showToast("Alojamento atualizado", "success");
       } else {
-        const res = await fetch("/api/accommodations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("accommodations")
-            .insert({ name: payload.name, unit_id: payload.unit_id, is_active: true });
-          if (error) {
-            showToast("Falha ao cadastrar alojamento", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("accommodations")
+          .insert({ name: payload.name, unit_id: payload.unit_id, is_active: true });
+        if (error) {
+          showToast("Falha ao cadastrar alojamento", "error");
+          return;
         }
         showToast("Alojamento criado", "success");
       }
@@ -148,19 +110,13 @@ export default function Accommodations() {
     if (!confirm("Tem certeza que deseja desativar este alojamento?")) return;
 
     try {
-      const res = await fetch(`/api/accommodations/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const { error } = await supabase
-          .from("accommodations")
-          .update({ is_active: false })
-          .eq("id", id);
-        if (error) {
-          showToast("Falha ao desativar alojamento", "error");
-          return;
-        }
+      const { error } = await supabase
+        .from("accommodations")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Falha ao desativar alojamento", "error");
+        return;
       }
       showToast("Alojamento desativado", "success");
       fetchAccommodations();

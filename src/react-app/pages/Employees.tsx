@@ -43,33 +43,22 @@ export default function Employees() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("/api/employees", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("employees")
-          .select(
-            "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
-          )
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        if (!error && Array.isArray(data)) {
-          setEmployees(data as Employee[]);
-        } else {
-          setEmployees([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("employees")
+        .select(
+          "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
+        )
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      if (!error && Array.isArray(data)) {
+        setEmployees(data as Employee[]);
+      } else {
+        setEmployees([]);
       }
-      const data = (await response.json()) as { employees: Employee[] };
-      const list = Array.isArray(data.employees) ? data.employees : [];
-      setEmployees(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((e) => e.unit_id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching employees:", error);
     } finally {
@@ -79,20 +68,14 @@ export default function Employees() {
 
   const fetchUnits = async () => {
     try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("units")
-          .select("id, name, is_active, created_at, updated_at");
-        if (!error && Array.isArray(data)) {
-          setUnits((data as Unit[]).filter((u) => u.is_active));
-        } else {
-          setUnits([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("units")
+        .select("id, name, is_active, created_at, updated_at");
+      if (!error && Array.isArray(data)) {
+        setUnits((data as Unit[]).filter((u) => u.is_active));
+      } else {
+        setUnits([]);
       }
-      const unitsData = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(unitsData.units) ? unitsData.units : []);
     } catch (error) {
       console.error("Error fetching units:", error);
     }
@@ -100,31 +83,20 @@ export default function Employees() {
 
   const fetchAccommodations = async () => {
     try {
-      const response = await fetch("/api/accommodations", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("accommodations")
-          .select("id, name, unit_id, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        if (!error && Array.isArray(data)) {
-          setAccommodations(data as Accommodation[]);
-        } else {
-          setAccommodations([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("accommodations")
+        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      if (!error && Array.isArray(data)) {
+        setAccommodations(data as Accommodation[]);
+      } else {
+        setAccommodations([]);
       }
-      const accData = (await response.json()) as { accommodations: Accommodation[] };
-      const list = Array.isArray(accData.accommodations) ? accData.accommodations : [];
-      setAccommodations(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((a) => a.unit_id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching accommodations:", error);
     }
@@ -132,40 +104,26 @@ export default function Employees() {
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch("/api/rooms", { credentials: "include" });
-      if (!response.ok) {
-        const { data: accRows } = await supabase
-          .from("accommodations")
-          .select("id")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
-        const { data, error } = await supabase
-          .from("rooms")
-          .select("id, accommodation_id, bed_count, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .in("accommodation_id", accIds.length ? accIds : [-1]);
-        if (!error && Array.isArray(data)) {
-          setRooms(data as Room[]);
-        } else {
-          setRooms([]);
-        }
-        return;
+      const { data: accRows } = await supabase
+        .from("accommodations")
+        .select("id")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("id, accommodation_id, bed_count, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .in("accommodation_id", accIds.length ? accIds : [-1]);
+      if (!error && Array.isArray(data)) {
+        setRooms(data as Room[]);
+      } else {
+        setRooms([]);
       }
-      const roomsData = (await response.json()) as { rooms: Room[] };
-      const list = Array.isArray(roomsData.rooms) ? roomsData.rooms : [];
-      const allowedAccIds = accommodations
-        .filter((a) => (currentUser?.is_super_user || !currentUser?.unit_id ? true : a.unit_id === currentUser.unit_id))
-        .map((a) => a.id);
-      setRooms(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((r) => allowedAccIds.includes(r.accommodation_id))
-      );
     } catch (error) {
       console.error("Error fetching rooms:", error);
     }
@@ -173,21 +131,15 @@ export default function Employees() {
 
   const fetchFunctions = async () => {
     try {
-      const response = await fetch("/api/functions", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("functions")
-          .select("id, name, is_active, created_at, updated_at")
-          .eq("is_active", true);
-        if (!error && Array.isArray(data)) {
-          setFunctions(data as Function[]);
-        } else {
-          setFunctions([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("functions")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true);
+      if (!error && Array.isArray(data)) {
+        setFunctions(data as Function[]);
+      } else {
+        setFunctions([]);
       }
-      const funcData = (await response.json()) as { functions: Function[] };
-      setFunctions(Array.isArray(funcData.functions) ? funcData.functions : []);
     } catch (error) {
       console.error("Error fetching functions:", error);
     }
@@ -210,61 +162,45 @@ export default function Employees() {
         status: (formData.status || "").toUpperCase(),
       };
       if (editingEmployee) {
-        const res = await fetch(`/api/employees/${editingEmployee.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("employees")
-            .update({
-              registration_number: payload.registration_number,
-              full_name: payload.full_name,
-              arrival_date: payload.arrival_date,
-              departure_date: payload.departure_date,
-              observation: payload.observation,
-              unit_id: payload.unit_id,
-              accommodation_id: payload.accommodation_id,
-              room_id: payload.room_id,
-              function_id: payload.function_id,
-              status: payload.status,
-            })
-            .eq("id", editingEmployee.id);
-          if (error) {
-            showToast("Falha ao salvar funcionário", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("employees")
+          .update({
+            registration_number: payload.registration_number,
+            full_name: payload.full_name,
+            arrival_date: payload.arrival_date,
+            departure_date: payload.departure_date,
+            observation: payload.observation,
+            unit_id: payload.unit_id,
+            accommodation_id: payload.accommodation_id,
+            room_id: payload.room_id,
+            function_id: payload.function_id,
+            status: payload.status,
+          })
+          .eq("id", editingEmployee.id);
+        if (error) {
+          showToast("Falha ao salvar funcionário", "error");
+          return;
         }
         showToast("Funcionário atualizado", "success");
       } else {
-        const res = await fetch("/api/employees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("employees")
-            .insert({
-              registration_number: payload.registration_number,
-              full_name: payload.full_name,
-              arrival_date: payload.arrival_date,
-              departure_date: payload.departure_date,
-              observation: payload.observation,
-              unit_id: payload.unit_id,
-              accommodation_id: payload.accommodation_id,
-              room_id: payload.room_id,
-              function_id: payload.function_id,
-              status: payload.status,
-              is_active: true,
-            });
-          if (error) {
-            showToast("Falha ao cadastrar funcionário", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("employees")
+          .insert({
+            registration_number: payload.registration_number,
+            full_name: payload.full_name,
+            arrival_date: payload.arrival_date,
+            departure_date: payload.departure_date,
+            observation: payload.observation,
+            unit_id: payload.unit_id,
+            accommodation_id: payload.accommodation_id,
+            room_id: payload.room_id,
+            function_id: payload.function_id,
+            status: payload.status,
+            is_active: true,
+          });
+        if (error) {
+          showToast("Falha ao cadastrar funcionário", "error");
+          return;
         }
         showToast("Funcionário criado", "success");
       }
@@ -283,19 +219,13 @@ export default function Employees() {
     if (!confirm("Tem certeza que deseja desativar este funcionário?")) return;
 
     try {
-      const res = await fetch(`/api/employees/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const { error } = await supabase
-          .from("employees")
-          .update({ is_active: false })
-          .eq("id", id);
-        if (error) {
-          showToast("Falha ao desativar funcionário", "error");
-          return;
-        }
+      const { error } = await supabase
+        .from("employees")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Falha ao desativar funcionário", "error");
+        return;
       }
       showToast("Funcionário desativado", "success");
       fetchEmployees();

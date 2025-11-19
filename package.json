@@ -45,7 +45,7 @@
     "build": "tsc -b && vite build",
     "cf-typegen": "wrangler types",
     "check": "tsc && vite build && wrangler deploy --dry-run",
-    "dev": "concurrently \"tsx ./src/server.ts\" \"vite\"",
+    "dev": "vite",
     "lint": "eslint ."
   }
 }

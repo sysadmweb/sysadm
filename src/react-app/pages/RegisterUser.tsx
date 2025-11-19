@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Unit } from "@/shared/types";
 import { Shield, User as UserIcon, ArrowLeft } from "lucide-react";
+import { supabase } from "@/react-app/supabase";
+import * as bcrypt from "bcryptjs";
 
 export default function RegisterUser() {
   const { user: currentUser } = useAuth();
@@ -21,10 +23,12 @@ export default function RegisterUser() {
   useEffect(() => {
     const fetchUnits = async () => {
       try {
-        const response = await fetch("/api/units", { credentials: "include" });
-        if (response.ok) {
-          const data = (await response.json()) as { units: Unit[] };
-          setUnits(data.units);
+        const { data, error } = await supabase
+          .from("units")
+          .select("id, name, is_active")
+          .eq("is_active", true);
+        if (!error && Array.isArray(data)) {
+          setUnits(data as Unit[]);
         }
       } catch { void 0; }
     };
@@ -47,20 +51,19 @@ export default function RegisterUser() {
         setError("A senha deve ter pelo menos 4 caracteres");
         return;
       }
-      const response = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        try {
-          const errJson = await response.json();
-          setError(errJson.error || "Falha ao salvar");
-        } catch {
-          const errText = await response.text();
-          setError(errText || "Falha ao salvar");
-        }
+      const pwHash = await bcrypt.hash(payload.password, 10);
+      const { error } = await supabase
+        .from("users")
+        .insert({
+          username: payload.username,
+          password_hash: pwHash,
+          name: payload.name,
+          unit_id: payload.unit_id,
+          is_super_user: payload.is_super_user,
+          is_active: true,
+        });
+      if (error) {
+        setError("Falha ao salvar");
         return;
       }
       navigate("/users");

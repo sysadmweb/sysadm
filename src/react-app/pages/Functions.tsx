@@ -22,21 +22,15 @@ export default function Functions() {
 
   const fetchFunctions = async () => {
     try {
-      const response = await fetch("/api/functions", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("functions")
-          .select("id, name, is_active, created_at, updated_at")
-          .eq("is_active", true);
-        if (!error && Array.isArray(data)) {
-          setFunctions(data as Function[]);
-        } else {
-          setFunctions([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("functions")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true);
+      if (!error && Array.isArray(data)) {
+        setFunctions(data as Function[]);
+      } else {
+        setFunctions([]);
       }
-      const data = (await response.json()) as { functions: Function[] };
-      setFunctions(Array.isArray(data.functions) ? data.functions : []);
     } catch (error) {
       console.error("Error fetching functions:", error);
     } finally {
@@ -50,38 +44,22 @@ export default function Functions() {
     try {
       const payload = { name: formData.name.toUpperCase() };
       if (editingFunction) {
-        const res = await fetch(`/api/functions/${editingFunction.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("functions")
-            .update({ name: payload.name })
-            .eq("id", editingFunction.id);
-          if (error) {
-            showToast("Falha ao salvar função", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("functions")
+          .update({ name: payload.name })
+          .eq("id", editingFunction.id);
+        if (error) {
+          showToast("Falha ao salvar função", "error");
+          return;
         }
         showToast("Função atualizada", "success");
       } else {
-        const res = await fetch("/api/functions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("functions")
-            .insert({ name: payload.name, is_active: true });
-          if (error) {
-            showToast("Falha ao cadastrar função", "error");
-            return;
-          }
+        const { error } = await supabase
+          .from("functions")
+          .insert({ name: payload.name, is_active: true });
+        if (error) {
+          showToast("Falha ao cadastrar função", "error");
+          return;
         }
         showToast("Função criada", "success");
       }
@@ -100,19 +78,13 @@ export default function Functions() {
     if (!confirm("Tem certeza que deseja desativar esta função?")) return;
 
     try {
-      const res = await fetch(`/api/functions/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const { error } = await supabase
-          .from("functions")
-          .update({ is_active: false })
-          .eq("id", id);
-        if (error) {
-          showToast("Falha ao desativar função", "error");
-          return;
-        }
+      const { error } = await supabase
+        .from("functions")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Falha ao desativar função", "error");
+        return;
       }
       showToast("Função desativada", "success");
       fetchFunctions();

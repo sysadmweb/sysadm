@@ -37,31 +37,20 @@ export default function Users() {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch("/api/users", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("id, username, name, unit_id, is_super_user, is_active, created_at, updated_at")
-          .eq("is_active", true)
-          .match(
-            currentUser?.is_super_user || !currentUser?.unit_id
-              ? {}
-              : { unit_id: currentUser.unit_id }
-          );
-        if (!error && Array.isArray(data)) {
-          setUsers(data as User[]);
-        } else {
-          setUsers([]);
-        }
-        return;
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, username, name, unit_id, is_super_user, is_active, created_at, updated_at")
+        .eq("is_active", true)
+        .match(
+          currentUser?.is_super_user || !currentUser?.unit_id
+            ? {}
+            : { unit_id: currentUser.unit_id }
+        );
+      if (!error && Array.isArray(data)) {
+        setUsers(data as User[]);
+      } else {
+        setUsers([]);
       }
-      const data = (await response.json()) as { users: User[] };
-      const list = Array.isArray(data.users) ? data.users : [];
-      setUsers(
-        currentUser?.is_super_user || !currentUser?.unit_id
-          ? list
-          : list.filter((u) => u.unit_id === currentUser.unit_id)
-      );
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
@@ -101,45 +90,27 @@ export default function Users() {
           name: formData.name.toUpperCase(),
           unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
         };
-        const res = await fetch(`/api/users/${editingUser.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const { error } = await supabase
-            .from("users")
-            .update(payload)
-            .eq("id", editingUser.id);
-          if (error) {
-            const errText = await res.text();
-            setError(errText || "Falha ao salvar");
-            showToast("Falha ao salvar usuário", "error");
-            return;
-          } else {
-            setError("");
-          }
+        const { error: upErr } = await supabase
+          .from("users")
+          .update(payload)
+          .eq("id", editingUser.id);
+        if (upErr) {
+          setError("Falha ao salvar");
+          showToast("Falha ao salvar usuário", "error");
+          return;
+        } else {
+          setError("");
         }
         if (currentUser?.is_super_user && formData.password) {
-          const res2 = await fetch(`/api/users/${editingUser.id}/reset-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ new_password: formData.password }),
-          });
-          if (!res2.ok) {
-            const pwHash = await hashPassword(formData.password);
-            const { error } = await supabase
-              .from("users")
-              .update({ password_hash: pwHash })
-              .eq("id", editingUser.id);
-            if (error) {
-              const errText = await res2.text();
-              setError(errText || "Falha ao salvar");
-              showToast("Falha ao alterar senha", "error");
-              return;
-            }
+          const pwHash = await hashPassword(formData.password);
+          const { error } = await supabase
+            .from("users")
+            .update({ password_hash: pwHash })
+            .eq("id", editingUser.id);
+          if (error) {
+            setError("Falha ao salvar");
+            showToast("Falha ao alterar senha", "error");
+            return;
           }
         }
       } else {
@@ -150,32 +121,23 @@ export default function Users() {
           unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
           is_super_user: !!formData.is_super_user,
         };
-        const res = await fetch("/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          const pwHash = payload.password ? await hashPassword(payload.password) : "";
-          const { error } = await supabase
-            .from("users")
-            .insert({
-              username: payload.username,
-              password_hash: pwHash,
-              name: payload.name,
-              unit_id: formData.unit_id,
-              is_super_user: !!formData.is_super_user,
-              is_active: true,
-            });
-          if (error) {
-            setError(errText || "Falha ao salvar");
-            showToast("Falha ao salvar usuário", "error");
-            return;
-          } else {
-            setError("");
-          }
+        const pwHash = payload.password ? await hashPassword(payload.password) : "";
+        const { error } = await supabase
+          .from("users")
+          .insert({
+            username: payload.username,
+            password_hash: pwHash,
+            name: payload.name,
+            unit_id: payload.unit_id,
+            is_super_user: !!payload.is_super_user,
+            is_active: true,
+          });
+        if (error) {
+          setError("Falha ao salvar");
+          showToast("Falha ao salvar usuário", "error");
+          return;
+        } else {
+          setError("");
         }
       }
 
