@@ -173,6 +173,7 @@ export const DashboardStatsSchema = z.object({
   total_beds: z.number(),
   occupied_beds: z.number(),
   available_beds: z.number(),
+  total_accommodations: z.number(),
   employees_by_function: z.array(z.object({
     function_name: z.string(),
     count: z.number(),

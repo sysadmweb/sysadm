@@ -2,12 +2,19 @@ import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
-import { Users, Bed, Loader2, UserCheck, HouseIcon } from "lucide-react";
+import { Bed, Loader2, UserCheck, HouseIcon, Home } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { useAuth } from "@/react-app/contexts/AuthContext";
 
 export default function Dashboard() {
   const perms = usePagePermissions("dashboard");
+  const { user: currentUser } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [employeesData, setEmployeesData] = useState<{ registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; is_active: boolean }[]>([]);
+  const [functionsData, setFunctionsData] = useState<{ id: number; name: string }[]>([]);
+  const [unitsData, setUnitsData] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     fetchStats();
@@ -16,18 +23,43 @@ export default function Dashboard() {
   const fetchStats = async () => {
     try {
       type RoomLite = { id: number; bed_count: number };
-      type EmployeeLite = { id: number; function_id: number | null; room_id: number | null; is_active: boolean };
+      type EmployeeLite = { id: number; registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; room_id: number | null; is_active: boolean };
       type FunctionLite = { id: number; name: string };
+      type UnitLite = { id: number; name: string };
 
-      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: rooms }, { data: employees }, { data: functions }] = await Promise.all([
-        supabase.from("employees").select("id", { count: "exact", head: true }),
-        supabase.from("employees").select("id").eq("is_active", true),
-        supabase.from("rooms").select("id, bed_count"),
-        supabase.from("employees").select("id, function_id, room_id, is_active"),
+      const employeeCountQuery = supabase
+        .from("employees")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", true);
+      const employeeRowsQuery = supabase
+        .from("employees")
+        .select("id")
+        .eq("is_active", true);
+      const employeesQuery = supabase
+        .from("employees")
+        .select("id, registration_number, full_name, function_id, unit_id, room_id, is_active");
+      const accommodationsQuery = supabase
+        .from("accommodations")
+        .select("id")
+        .eq("is_active", true);
+
+      const scope = currentUser?.is_super_user || !currentUser?.unit_id ? null : currentUser.unit_id;
+      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }] = await Promise.all([
+        scope ? employeeCountQuery.eq("unit_id", scope) : employeeCountQuery,
+        scope ? employeeRowsQuery.eq("unit_id", scope) : employeeRowsQuery,
+        scope ? employeesQuery.eq("unit_id", scope) : employeesQuery,
         supabase.from("functions").select("id, name"),
+        scope ? accommodationsQuery.eq("unit_id", scope) : accommodationsQuery,
+        supabase.from("units").select("id, name"),
       ]);
+      const activeAccommodations = Array.isArray(accRows) ? accRows.length : 0;
 
-      const roomsList = Array.isArray(rooms) ? (rooms as RoomLite[]) : [];
+      const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
+      const { data: roomsData } = await supabase
+        .from("rooms")
+        .select("id, bed_count, accommodation_id")
+        .in("accommodation_id", accIds.length ? accIds : [-1]);
+      const roomsList = Array.isArray(roomsData) ? (roomsData as RoomLite[]) : [];
       const employeesList = Array.isArray(employees) ? (employees as EmployeeLite[]) : [];
       const functionsList = Array.isArray(functions) ? (functions as FunctionLite[]) : [];
 
@@ -41,12 +73,17 @@ export default function Dashboard() {
         count: employeesList.filter((e) => e.function_id === f.id && e.is_active).length,
       }));
 
+      setEmployeesData(employeesList.map((e) => ({ registration_number: e.registration_number, full_name: e.full_name, function_id: e.function_id, unit_id: e.unit_id, is_active: e.is_active })));
+      setFunctionsData(functionsList.map((f) => ({ id: f.id, name: f.name })));
+      setUnitsData(Array.isArray(units) ? (units as UnitLite[]).map((u) => ({ id: u.id, name: u.name })) : []);
+
       setStats({
         total_employees: totalEmployees ?? 0,
         active_employees,
         total_beds,
         occupied_beds,
         available_beds,
+        total_accommodations: activeAccommodations ?? 0,
         employees_by_function,
       });
     } catch {
@@ -56,6 +93,7 @@ export default function Dashboard() {
         total_beds: 0,
         occupied_beds: 0,
         available_beds: 0,
+        total_accommodations: 0,
         employees_by_function: [],
       });
     } finally {
@@ -98,9 +136,9 @@ export default function Dashboard() {
       bgColor: "bg-green-500/10",
     },
        {
-      label: "Total de Funcionários",
-      value: stats?.total_employees || 0,
-      icon: Users,
+      label: "Total de Alojamentos",
+      value: stats?.total_accommodations || 0,
+      icon: Home,
       color: "from-blue-500 to-cyan-500",
       bgColor: "bg-blue-500/10",
     }
@@ -138,6 +176,35 @@ export default function Dashboard() {
         <h2 className="text-xl font-semibold text-slate-100 mb-6">
           Funcionários por Função
         </h2>
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => {
+              const doc = new jsPDF();
+              doc.setFontSize(14);
+              doc.text("LISTA DE COLABORADORES", 14, 20);
+              const activeEmployees = employeesData.filter((e) => e.is_active);
+              const body = activeEmployees.map((e) => [
+                e.registration_number || "-",
+                e.full_name || "-",
+                functionsData.find((f) => f.id === e.function_id)?.name || "-",
+                unitsData.find((u) => u.id === (e.unit_id ?? -1))?.name || "-",
+              ]);
+              autoTable(doc, {
+                head: [["Matricula", "Nome completo", "Função", "Obra"]],
+                body,
+                startY: 28,
+              });
+              const dateStr = new Date().toLocaleDateString("pt-BR");
+              const pageHeight = doc.internal.pageSize.getHeight();
+              doc.setFontSize(10);
+              doc.text(`Gerado em ${dateStr}`, 14, pageHeight - 10);
+              doc.save("lista-colaboradores.pdf");
+            }}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all"
+          >
+            Relatório
+          </button>
+        </div>
         {stats?.employees_by_function && stats.employees_by_function.length > 0 ? (
           <div className="space-y-4">
             {stats.employees_by_function.map((item, index) => (

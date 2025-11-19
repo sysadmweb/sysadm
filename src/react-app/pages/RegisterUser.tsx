@@ -37,9 +37,9 @@ export default function RegisterUser() {
     setIsSubmitting(true);
     try {
       const payload = {
-        username: formData.username.trim(),
+        username: formData.username.trim().toUpperCase(),
         password: formData.password,
-        name: formData.name.trim(),
+        name: formData.name.trim().toUpperCase(),
         unit_id: formData.unit_id,
         is_super_user: !!formData.is_super_user,
       };

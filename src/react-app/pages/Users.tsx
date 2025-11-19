@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { User, Unit } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
+import { supabase } from "@/react-app/supabase";
 
 export default function Users() {
   const { user: currentUser } = useAuth();
@@ -19,6 +20,12 @@ export default function Users() {
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+
+  const showToast = (text: string, kind: "success" | "error") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -29,12 +36,29 @@ export default function Users() {
     try {
       const response = await fetch("/api/users", { credentials: "include" });
       if (!response.ok) {
-        try { await response.text(); } catch { void 0; }
-        setUsers([]);
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, username, name, unit_id, is_super_user, is_active, created_at, updated_at")
+          .eq("is_active", true)
+          .match(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? {}
+              : { unit_id: currentUser.unit_id }
+          );
+        if (!error && Array.isArray(data)) {
+          setUsers(data as User[]);
+        } else {
+          setUsers([]);
+        }
         return;
       }
       const data = (await response.json()) as { users: User[] };
-      setUsers(Array.isArray(data.users) ? data.users : []);
+      const list = Array.isArray(data.users) ? data.users : [];
+      setUsers(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((u) => u.unit_id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
@@ -46,8 +70,14 @@ export default function Users() {
     try {
       const response = await fetch("/api/units", { credentials: "include" });
       if (!response.ok) {
-        try { await response.text(); } catch { void 0; }
-        setUnits([]);
+        const { data, error } = await supabase
+          .from("units")
+          .select("id, name, is_active, created_at, updated_at");
+        if (!error && Array.isArray(data)) {
+          setUnits((data as Unit[]).filter((u) => u.is_active));
+        } else {
+          setUnits([]);
+        }
         return;
       }
       const data = (await response.json()) as { units: Unit[] };
@@ -64,24 +94,29 @@ export default function Users() {
 
     try {
       if (editingUser) {
+        const payload = {
+          name: formData.name.toUpperCase(),
+          unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
+        };
         const res = await fetch(`/api/users/${editingUser.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({
-            name: formData.name,
-            unit_id: formData.unit_id,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
-          try {
-            const errJson = await res.json();
-            setError(errJson.error || "Falha ao salvar");
-          } catch {
+          const { error } = await supabase
+            .from("users")
+            .update(payload)
+            .eq("id", editingUser.id);
+          if (error) {
             const errText = await res.text();
             setError(errText || "Falha ao salvar");
+            showToast("Falha ao salvar usuário", "error");
+            return;
+          } else {
+            setError("");
           }
-          return;
         }
         if (currentUser?.is_super_user && formData.password) {
           const res2 = await fetch(`/api/users/${editingUser.id}/reset-password`, {
@@ -91,32 +126,44 @@ export default function Users() {
             body: JSON.stringify({ new_password: formData.password }),
           });
           if (!res2.ok) {
-            try {
-              const errJson = await res2.json();
-              setError(errJson.error || "Falha ao salvar");
-            } catch {
-              const errText = await res2.text();
-              setError(errText || "Falha ao salvar");
-            }
+            const errText = await res2.text();
+            setError(errText || "Falha ao salvar");
             return;
           }
         }
       } else {
+        const payload = {
+          username: formData.username.toUpperCase(),
+          password: formData.password,
+          name: formData.name.toUpperCase(),
+          unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
+          is_super_user: !!formData.is_super_user,
+        };
         const res = await fetch("/api/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
-          try {
-            const errJson = await res.json();
-            setError(errJson.error || "Falha ao salvar");
-          } catch {
-            const errText = await res.text();
+          const errText = await res.text();
+          const { error } = await supabase
+            .from("users")
+            .insert({
+              username: payload.username,
+              password_hash: "",
+              name: payload.name,
+              unit_id: formData.unit_id,
+              is_super_user: !!formData.is_super_user,
+              is_active: true,
+            });
+          if (error) {
             setError(errText || "Falha ao salvar");
+            showToast("Falha ao salvar usuário", "error");
+            return;
+          } else {
+            setError("");
           }
-          return;
         }
       }
 
@@ -124,9 +171,11 @@ export default function Users() {
       setEditingUser(null);
       setFormData({ username: "", password: "", name: "", unit_id: null, is_super_user: false });
       fetchUsers();
+      showToast(editingUser ? "Usuário atualizado" : "Usuário criado", "success");
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Falha ao salvar";
       setError(msg);
+      showToast("Falha ao salvar usuário", "error");
     }
     finally {
       setIsSubmitting(false);
@@ -137,23 +186,19 @@ export default function Users() {
     if (!confirm("Tem certeza que deseja desativar este usuário?")) return;
 
     try {
-      const res = await fetch(`/api/users/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        try {
-          const errJson = await res.json();
-          alert(errJson.error || "Falha ao desativar usuário");
-        } catch {
-          const errText = await res.text();
-          alert(errText || "Falha ao desativar usuário");
-        }
+      const { error } = await supabase
+        .from("users")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (error) {
+        showToast("Falha ao desativar usuário", "error");
         return;
       }
       fetchUsers();
+      showToast("Usuário desativado", "success");
     } catch (error) {
       console.error("Error deleting user:", error);
+      showToast("Falha ao desativar usuário", "error");
     }
   };
 
@@ -179,6 +224,15 @@ export default function Users() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
+            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Usuários</h1>

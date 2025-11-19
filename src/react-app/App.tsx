@@ -5,6 +5,7 @@ import DashboardPage from "@/react-app/pages/Dashboard";
 import UsersPage from "@/react-app/pages/Users";
 import UnitsPage from "@/react-app/pages/Units";
 import RegisterUserPage from "@/react-app/pages/RegisterUser";
+import PermissionsPage from "@/react-app/pages/Permissions";
 import FunctionsPage from "@/react-app/pages/Functions";
 import AccommodationsPage from "@/react-app/pages/Accommodations";
 import RoomsPage from "@/react-app/pages/Rooms";
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="accommodations" element={<AccommodationsPage />} />
             <Route path="rooms" element={<RoomsPage />} />
             <Route path="employees" element={<EmployeesPage />} />
+            <Route path="permissions" element={<PermissionsPage />} />
           </Route>
         </Routes>
       </Router>

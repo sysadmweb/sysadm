@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Accommodation, Unit } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Home } from "lucide-react";
+import { supabase } from "@/react-app/supabase";
+import { useAuth } from "@/react-app/contexts/AuthContext";
 
 export default function Accommodations() {
+  const { user: currentUser } = useAuth();
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -12,6 +15,12 @@ export default function Accommodations() {
     name: "",
     unit_id: 0,
   });
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+
+  const showToast = (text: string, kind: "success" | "error") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchAccommodations();
@@ -22,11 +31,29 @@ export default function Accommodations() {
     try {
       const response = await fetch("/api/accommodations", { credentials: "include" });
       if (!response.ok) {
-        setAccommodations([]);
+        const { data, error } = await supabase
+          .from("accommodations")
+          .select("id, name, unit_id, is_active, created_at, updated_at")
+          .eq("is_active", true)
+          .match(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? {}
+              : { unit_id: currentUser.unit_id }
+          );
+        if (!error && Array.isArray(data)) {
+          setAccommodations(data as Accommodation[]);
+        } else {
+          setAccommodations([]);
+        }
         return;
       }
       const data = (await response.json()) as { accommodations: Accommodation[] };
-      setAccommodations(Array.isArray(data.accommodations) ? data.accommodations : []);
+      const list = Array.isArray(data.accommodations) ? data.accommodations : [];
+      setAccommodations(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((a) => a.unit_id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching accommodations:", error);
     } finally {
@@ -38,11 +65,28 @@ export default function Accommodations() {
     try {
       const response = await fetch("/api/units", { credentials: "include" });
       if (!response.ok) {
-        setUnits([]);
+        const { data, error } = await supabase
+          .from("units")
+          .select("id, name, is_active, created_at, updated_at");
+        if (!error && Array.isArray(data)) {
+          const list = (data as Unit[]).filter((u) => u.is_active);
+          setUnits(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? list
+              : list.filter((u) => u.id === currentUser.unit_id)
+          );
+        } else {
+          setUnits([]);
+        }
         return;
       }
       const data = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(data.units) ? data.units : []);
+      const list = Array.isArray(data.units) ? data.units : [];
+      setUnits(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((u) => u.id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching units:", error);
     }
@@ -52,20 +96,42 @@ export default function Accommodations() {
     e.preventDefault();
 
     try {
+      const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id };
       if (editingAccommodation) {
-        await fetch(`/api/accommodations/${editingAccommodation.id}`, {
+        const res = await fetch(`/api/accommodations/${editingAccommodation.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("accommodations")
+            .update({ name: payload.name, unit_id: payload.unit_id })
+            .eq("id", editingAccommodation.id);
+          if (error) {
+            showToast("Falha ao salvar alojamento", "error");
+            return;
+          }
+        }
+        showToast("Alojamento atualizado", "success");
       } else {
-        await fetch("/api/accommodations", {
+        const res = await fetch("/api/accommodations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("accommodations")
+            .insert({ name: payload.name, unit_id: payload.unit_id, is_active: true });
+          if (error) {
+            showToast("Falha ao cadastrar alojamento", "error");
+            return;
+          }
+        }
+        showToast("Alojamento criado", "success");
       }
 
       setShowModal(false);
@@ -74,6 +140,7 @@ export default function Accommodations() {
       fetchAccommodations();
     } catch (error) {
       console.error("Error saving accommodation:", error);
+      showToast("Falha ao salvar alojamento", "error");
     }
   };
 
@@ -81,13 +148,25 @@ export default function Accommodations() {
     if (!confirm("Tem certeza que deseja desativar este alojamento?")) return;
 
     try {
-      await fetch(`/api/accommodations/${id}`, {
+      const res = await fetch(`/api/accommodations/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+      if (!res.ok) {
+        const { error } = await supabase
+          .from("accommodations")
+          .update({ is_active: false })
+          .eq("id", id);
+        if (error) {
+          showToast("Falha ao desativar alojamento", "error");
+          return;
+        }
+      }
+      showToast("Alojamento desativado", "success");
       fetchAccommodations();
     } catch (error) {
       console.error("Error deleting accommodation:", error);
+      showToast("Falha ao desativar alojamento", "error");
     }
   };
 
@@ -110,6 +189,15 @@ export default function Accommodations() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
+            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Alojamentos</h1>

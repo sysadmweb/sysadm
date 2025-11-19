@@ -1,14 +1,23 @@
 import { useEffect, useState } from "react";
 import { Unit } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Building2 } from "lucide-react";
+import { supabase } from "@/react-app/supabase";
+import { useAuth } from "@/react-app/contexts/AuthContext";
 
 export default function Units() {
+  const { user: currentUser } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [formData, setFormData] = useState({ name: "" });
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+
+  const showToast = (text: string, kind: "success" | "error") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchUnits();
@@ -18,11 +27,28 @@ export default function Units() {
     try {
       const response = await fetch("/api/units", { credentials: "include" });
       if (!response.ok) {
-        setUnits([]);
+        const { data, error } = await supabase
+          .from("units")
+          .select("id, name, is_active, created_at, updated_at");
+        if (!error && Array.isArray(data)) {
+          const list = (data as Unit[]).filter((u) => u.is_active);
+          setUnits(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? list
+              : list.filter((u) => u.id === currentUser.unit_id)
+          );
+        } else {
+          setUnits([]);
+        }
         return;
       }
       const data = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(data.units) ? data.units : []);
+      const list = Array.isArray(data.units) ? data.units : [];
+      setUnits(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list.filter((u) => u.is_active)
+          : list.filter((u) => u.is_active && u.id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching units:", error);
     } finally {
@@ -35,39 +61,52 @@ export default function Units() {
     setError("");
     try {
       let response: Response;
+      const payload = { name: formData.name.toUpperCase() };
       if (editingUnit) {
         response = await fetch(`/api/units/${editingUnit.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
       } else {
         response = await fetch("/api/units", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
       }
       if (!response.ok) {
-        try {
-          const errJson = await response.json();
-          setError(errJson.error || "Erro ao salvar unidade");
-        } catch {
-          try {
-            const errText = await response.text();
-            setError(errText || "Erro ao salvar unidade");
-          } catch { void 0; }
+        if (editingUnit) {
+          const { error } = await supabase
+            .from("units")
+            .update({ name: payload.name })
+            .eq("id", editingUnit.id);
+          if (error) {
+            setError("Erro ao salvar unidade");
+            showToast("Erro ao salvar unidade", "error");
+            return;
+          }
+        } else {
+          const { error } = await supabase
+            .from("units")
+            .insert({ name: payload.name, is_active: true });
+          if (error) {
+            setError("Erro ao salvar unidade");
+            showToast("Erro ao salvar unidade", "error");
+            return;
+          }
         }
-        return;
       }
+      showToast(editingUnit ? "Unidade atualizada" : "Unidade criada", "success");
       setShowModal(false);
       setEditingUnit(null);
       setFormData({ name: "" });
       fetchUnits();
     } catch (error) {
       console.error("Error saving unit:", error);
+      showToast("Erro ao salvar unidade", "error");
     }
   };
 
@@ -79,20 +118,20 @@ export default function Units() {
         credentials: "include",
       });
       if (!response.ok) {
-        try {
-          const errJson = await response.json();
-          alert(errJson.error || "Erro ao desativar unidade");
-        } catch {
-          try {
-            const errText = await response.text();
-            alert(errText || "Erro ao desativar unidade");
-          } catch { void 0; }
+        const { error } = await supabase
+          .from("units")
+          .update({ is_active: false })
+          .eq("id", id);
+        if (error) {
+          showToast("Erro ao desativar unidade", "error");
+          return;
         }
-        return;
       }
+      showToast("Unidade desativada", "success");
       fetchUnits();
     } catch (error) {
       console.error("Error deleting unit:", error);
+      showToast("Erro ao desativar unidade", "error");
     }
   };
 
@@ -112,6 +151,15 @@ export default function Units() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
+            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Unidades</h1>

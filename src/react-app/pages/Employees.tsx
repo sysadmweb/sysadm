@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
+import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Plus, Edit, Trash2, Loader2, UserCircle } from "lucide-react";
 
 export default function Employees() {
+  const { user: currentUser } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -23,6 +26,12 @@ export default function Employees() {
     function_id: null as number | null,
     status: "",
   });
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+
+  const showToast = (text: string, kind: "success" | "error") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -36,11 +45,31 @@ export default function Employees() {
     try {
       const response = await fetch("/api/employees", { credentials: "include" });
       if (!response.ok) {
-        setEmployees([]);
+        const { data, error } = await supabase
+          .from("employees")
+          .select(
+            "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
+          )
+          .eq("is_active", true)
+          .match(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? {}
+              : { unit_id: currentUser.unit_id }
+          );
+        if (!error && Array.isArray(data)) {
+          setEmployees(data as Employee[]);
+        } else {
+          setEmployees([]);
+        }
         return;
       }
       const data = (await response.json()) as { employees: Employee[] };
-      setEmployees(Array.isArray(data.employees) ? data.employees : []);
+      const list = Array.isArray(data.employees) ? data.employees : [];
+      setEmployees(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((e) => e.unit_id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching employees:", error);
     } finally {
@@ -52,7 +81,14 @@ export default function Employees() {
     try {
       const response = await fetch("/api/units", { credentials: "include" });
       if (!response.ok) {
-        setUnits([]);
+        const { data, error } = await supabase
+          .from("units")
+          .select("id, name, is_active, created_at, updated_at");
+        if (!error && Array.isArray(data)) {
+          setUnits((data as Unit[]).filter((u) => u.is_active));
+        } else {
+          setUnits([]);
+        }
         return;
       }
       const unitsData = (await response.json()) as { units: Unit[] };
@@ -66,11 +102,29 @@ export default function Employees() {
     try {
       const response = await fetch("/api/accommodations", { credentials: "include" });
       if (!response.ok) {
-        setAccommodations([]);
+        const { data, error } = await supabase
+          .from("accommodations")
+          .select("id, name, unit_id, is_active, created_at, updated_at")
+          .eq("is_active", true)
+          .match(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? {}
+              : { unit_id: currentUser.unit_id }
+          );
+        if (!error && Array.isArray(data)) {
+          setAccommodations(data as Accommodation[]);
+        } else {
+          setAccommodations([]);
+        }
         return;
       }
       const accData = (await response.json()) as { accommodations: Accommodation[] };
-      setAccommodations(Array.isArray(accData.accommodations) ? accData.accommodations : []);
+      const list = Array.isArray(accData.accommodations) ? accData.accommodations : [];
+      setAccommodations(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((a) => a.unit_id === currentUser.unit_id)
+      );
     } catch (error) {
       console.error("Error fetching accommodations:", error);
     }
@@ -80,11 +134,38 @@ export default function Employees() {
     try {
       const response = await fetch("/api/rooms", { credentials: "include" });
       if (!response.ok) {
-        setRooms([]);
+        const { data: accRows } = await supabase
+          .from("accommodations")
+          .select("id")
+          .eq("is_active", true)
+          .match(
+            currentUser?.is_super_user || !currentUser?.unit_id
+              ? {}
+              : { unit_id: currentUser.unit_id }
+          );
+        const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
+        const { data, error } = await supabase
+          .from("rooms")
+          .select("id, accommodation_id, bed_count, is_active, created_at, updated_at")
+          .eq("is_active", true)
+          .in("accommodation_id", accIds.length ? accIds : [-1]);
+        if (!error && Array.isArray(data)) {
+          setRooms(data as Room[]);
+        } else {
+          setRooms([]);
+        }
         return;
       }
       const roomsData = (await response.json()) as { rooms: Room[] };
-      setRooms(Array.isArray(roomsData.rooms) ? roomsData.rooms : []);
+      const list = Array.isArray(roomsData.rooms) ? roomsData.rooms : [];
+      const allowedAccIds = accommodations
+        .filter((a) => (currentUser?.is_super_user || !currentUser?.unit_id ? true : a.unit_id === currentUser.unit_id))
+        .map((a) => a.id);
+      setRooms(
+        currentUser?.is_super_user || !currentUser?.unit_id
+          ? list
+          : list.filter((r) => allowedAccIds.includes(r.accommodation_id))
+      );
     } catch (error) {
       console.error("Error fetching rooms:", error);
     }
@@ -94,7 +175,15 @@ export default function Employees() {
     try {
       const response = await fetch("/api/functions", { credentials: "include" });
       if (!response.ok) {
-        setFunctions([]);
+        const { data, error } = await supabase
+          .from("functions")
+          .select("id, name, is_active, created_at, updated_at")
+          .eq("is_active", true);
+        if (!error && Array.isArray(data)) {
+          setFunctions(data as Function[]);
+        } else {
+          setFunctions([]);
+        }
         return;
       }
       const funcData = (await response.json()) as { functions: Function[] };
@@ -108,20 +197,76 @@ export default function Employees() {
     e.preventDefault();
 
     try {
+      const payload = {
+        registration_number: formData.registration_number.toUpperCase(),
+        full_name: formData.full_name.toUpperCase(),
+        arrival_date: formData.arrival_date || null,
+        departure_date: formData.departure_date || null,
+        observation: (formData.observation || "").toUpperCase(),
+        unit_id: formData.unit_id,
+        accommodation_id: formData.accommodation_id,
+        room_id: formData.room_id,
+        function_id: formData.function_id,
+        status: (formData.status || "").toUpperCase(),
+      };
       if (editingEmployee) {
-        await fetch(`/api/employees/${editingEmployee.id}`, {
+        const res = await fetch(`/api/employees/${editingEmployee.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("employees")
+            .update({
+              registration_number: payload.registration_number,
+              full_name: payload.full_name,
+              arrival_date: payload.arrival_date,
+              departure_date: payload.departure_date,
+              observation: payload.observation,
+              unit_id: payload.unit_id,
+              accommodation_id: payload.accommodation_id,
+              room_id: payload.room_id,
+              function_id: payload.function_id,
+              status: payload.status,
+            })
+            .eq("id", editingEmployee.id);
+          if (error) {
+            showToast("Falha ao salvar funcionário", "error");
+            return;
+          }
+        }
+        showToast("Funcionário atualizado", "success");
       } else {
-        await fetch("/api/employees", {
+        const res = await fetch("/api/employees", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("employees")
+            .insert({
+              registration_number: payload.registration_number,
+              full_name: payload.full_name,
+              arrival_date: payload.arrival_date,
+              departure_date: payload.departure_date,
+              observation: payload.observation,
+              unit_id: payload.unit_id,
+              accommodation_id: payload.accommodation_id,
+              room_id: payload.room_id,
+              function_id: payload.function_id,
+              status: payload.status,
+              is_active: true,
+            });
+          if (error) {
+            showToast("Falha ao cadastrar funcionário", "error");
+            return;
+          }
+        }
+        showToast("Funcionário criado", "success");
       }
 
       setShowModal(false);
@@ -130,6 +275,7 @@ export default function Employees() {
       fetchEmployees();
     } catch (error) {
       console.error("Error saving employee:", error);
+      showToast("Falha ao salvar funcionário", "error");
     }
   };
 
@@ -137,13 +283,25 @@ export default function Employees() {
     if (!confirm("Tem certeza que deseja desativar este funcionário?")) return;
 
     try {
-      await fetch(`/api/employees/${id}`, {
+      const res = await fetch(`/api/employees/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+      if (!res.ok) {
+        const { error } = await supabase
+          .from("employees")
+          .update({ is_active: false })
+          .eq("id", id);
+        if (error) {
+          showToast("Falha ao desativar funcionário", "error");
+          return;
+        }
+      }
+      showToast("Funcionário desativado", "success");
       fetchEmployees();
     } catch (error) {
       console.error("Error deleting employee:", error);
+      showToast("Falha ao desativar funcionário", "error");
     }
   };
 
@@ -193,6 +351,15 @@ export default function Employees() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
+            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Funcionários</h1>

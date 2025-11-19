@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Function } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Briefcase } from "lucide-react";
+import { supabase } from "@/react-app/supabase";
 
 export default function Functions() {
   const [functions, setFunctions] = useState<Function[]>([]);
@@ -8,6 +9,12 @@ export default function Functions() {
   const [showModal, setShowModal] = useState(false);
   const [editingFunction, setEditingFunction] = useState<Function | null>(null);
   const [formData, setFormData] = useState({ name: "" });
+  const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+
+  const showToast = (text: string, kind: "success" | "error") => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchFunctions();
@@ -17,7 +24,15 @@ export default function Functions() {
     try {
       const response = await fetch("/api/functions", { credentials: "include" });
       if (!response.ok) {
-        setFunctions([]);
+        const { data, error } = await supabase
+          .from("functions")
+          .select("id, name, is_active, created_at, updated_at")
+          .eq("is_active", true);
+        if (!error && Array.isArray(data)) {
+          setFunctions(data as Function[]);
+        } else {
+          setFunctions([]);
+        }
         return;
       }
       const data = (await response.json()) as { functions: Function[] };
@@ -33,20 +48,42 @@ export default function Functions() {
     e.preventDefault();
 
     try {
+      const payload = { name: formData.name.toUpperCase() };
       if (editingFunction) {
-        await fetch(`/api/functions/${editingFunction.id}`, {
+        const res = await fetch(`/api/functions/${editingFunction.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("functions")
+            .update({ name: payload.name })
+            .eq("id", editingFunction.id);
+          if (error) {
+            showToast("Falha ao salvar função", "error");
+            return;
+          }
+        }
+        showToast("Função atualizada", "success");
       } else {
-        await fetch("/api/functions", {
+        const res = await fetch("/api/functions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
+        if (!res.ok) {
+          const { error } = await supabase
+            .from("functions")
+            .insert({ name: payload.name, is_active: true });
+          if (error) {
+            showToast("Falha ao cadastrar função", "error");
+            return;
+          }
+        }
+        showToast("Função criada", "success");
       }
 
       setShowModal(false);
@@ -55,6 +92,7 @@ export default function Functions() {
       fetchFunctions();
     } catch (error) {
       console.error("Error saving function:", error);
+      showToast("Falha ao salvar função", "error");
     }
   };
 
@@ -62,13 +100,25 @@ export default function Functions() {
     if (!confirm("Tem certeza que deseja desativar esta função?")) return;
 
     try {
-      await fetch(`/api/functions/${id}`, {
+      const res = await fetch(`/api/functions/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+      if (!res.ok) {
+        const { error } = await supabase
+          .from("functions")
+          .update({ is_active: false })
+          .eq("id", id);
+        if (error) {
+          showToast("Falha ao desativar função", "error");
+          return;
+        }
+      }
+      showToast("Função desativada", "success");
       fetchFunctions();
     } catch (error) {
       console.error("Error deleting function:", error);
+      showToast("Falha ao desativar função", "error");
     }
   };
 
@@ -88,6 +138,15 @@ export default function Functions() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
+            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-100">Funções</h1>
