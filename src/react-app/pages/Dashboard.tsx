@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
-import { Loader2, UserCheck, HouseIcon, Home, DollarSign, UserCheck2Icon, User2, UserCheck2, User2Icon, UserSquare2Icon, TagIcon } from "lucide-react";
+import { Loader2, UserCheck, Home, DollarSign, TagIcon } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useAuth } from "@/react-app/contexts/AuthContext";
