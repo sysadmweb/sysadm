@@ -42,15 +42,23 @@ export default function Dashboard() {
         .from("accommodations")
         .select("id")
         .eq("is_active", true);
+      const isSuper = currentUser?.is_super_user;
+      let unitIds: number[] = [];
+      if (!isSuper && currentUser?.id) {
+        const { data: links } = await supabase
+          .from("user_units")
+          .select("unit_id")
+          .eq("user_id", currentUser.id);
+        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+      }
 
-      const scope = currentUser?.is_super_user || !currentUser?.unit_id ? null : currentUser.unit_id;
       const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }] = await Promise.all([
-        scope ? employeeCountQuery.eq("unit_id", scope) : employeeCountQuery,
-        scope ? employeeRowsQuery.eq("unit_id", scope) : employeeRowsQuery,
-        scope ? employeesQuery.eq("unit_id", scope) : employeesQuery,
+        isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
+        isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
+        isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
         supabase.from("functions").select("id, name"),
-        scope ? accommodationsQuery.eq("unit_id", scope) : accommodationsQuery,
-        supabase.from("units").select("id, name"),
+        isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
+        isSuper || unitIds.length === 0 ? supabase.from("units").select("id, name") : supabase.from("units").select("id, name").in("id", unitIds),
       ]);
       const activeAccommodations = Array.isArray(accRows) ? accRows.length : 0;
 

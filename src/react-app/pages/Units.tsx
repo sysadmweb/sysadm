@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Unit } from "@/shared/types";
-import { Plus, Edit, Trash2, Loader2, Building2 } from "lucide-react";
+import { User, Unit } from "@/shared/types";
+import { Plus, Edit, Trash2, Loader2, Building2, UserCheck } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
@@ -13,6 +13,10 @@ export default function Units() {
   const [formData, setFormData] = useState({ name: "" });
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [assignModalUnit, setAssignModalUnit] = useState<Unit | null>(null);
+  const [commonUsers, setCommonUsers] = useState<User[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [isSavingAssign, setIsSavingAssign] = useState(false);
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -106,6 +110,52 @@ export default function Units() {
     setShowModal(true);
   };
 
+  const openAssignModal = async (unit: Unit) => {
+    setAssignModalUnit(unit);
+    try {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, username, name, is_super_user, is_active")
+        .eq("is_active", true)
+        .eq("is_super_user", false);
+      setCommonUsers(Array.isArray(users) ? (users as User[]) : []);
+      const { data: links } = await supabase
+        .from("user_units")
+        .select("user_id")
+        .eq("unit_id", unit.id);
+      const preselected = Array.isArray(links) ? (links as { user_id: number }[]).map((l) => l.user_id) : [];
+      setSelectedUserIds(preselected);
+    } catch (error) {
+      console.error("Error loading assignment data:", error);
+      setCommonUsers([]);
+      setSelectedUserIds([]);
+    }
+  };
+
+  const toggleUserAssign = (id: number) => {
+    setSelectedUserIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const saveAssignments = async () => {
+    if (!assignModalUnit) return;
+    setIsSavingAssign(true);
+    try {
+      await supabase.from("user_units").delete().eq("unit_id", assignModalUnit.id);
+      if (selectedUserIds.length) {
+        await supabase
+          .from("user_units")
+          .insert(selectedUserIds.map((uid) => ({ user_id: uid, unit_id: assignModalUnit.id })));
+      }
+      showToast("Vinculações salvas", "success");
+      setAssignModalUnit(null);
+    } catch (error) {
+      console.error("Error saving assignments:", error);
+      showToast("Falha ao salvar vinculações", "error");
+    } finally {
+      setIsSavingAssign(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -161,6 +211,12 @@ export default function Units() {
                   <Edit className="w-4 h-4" />
                 </button>
                 <button
+                  onClick={() => openAssignModal(unit)}
+                  className="p-2 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                >
+                  <UserCheck className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => handleDelete(unit.id)}
                   className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                 >
@@ -176,8 +232,8 @@ export default function Units() {
         ))}
       </div>
 
-      {/* Modal */}
-      {showModal && (
+  {/* Modal */}
+  {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-slate-100 mb-4">
@@ -191,7 +247,7 @@ export default function Units() {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   required
                 />
@@ -217,9 +273,51 @@ export default function Units() {
                 </button>
               </div>
             </form>
-          </div>
+      </div>
+    </div>
+  )}
+
+  {assignModalUnit && (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
+        <h2 className="text-xl font-bold text-slate-100 mb-4">Usuários da Unidade</h2>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {commonUsers.map((u) => (
+            <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800/50">
+              <input
+                type="checkbox"
+                checked={selectedUserIds.includes(u.id)}
+                onChange={() => toggleUserAssign(u.id)}
+              />
+              <span className="text-slate-200">{u.name}</span>
+              <span className="text-slate-500 text-xs">({u.username})</span>
+            </label>
+          ))}
+          {commonUsers.length === 0 && (
+            <div className="text-slate-400 text-sm">Nenhum usuário comum encontrado</div>
+          )}
         </div>
-      )}
+        <div className="flex gap-3 pt-4">
+          <button
+            type="button"
+            onClick={() => setAssignModalUnit(null)}
+            className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={saveAssignments}
+            disabled={isSavingAssign}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-60"
+          >
+            {isSavingAssign ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
     </div>
   );
 }
+

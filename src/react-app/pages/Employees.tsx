@@ -43,17 +43,23 @@ export default function Employees() {
 
   const fetchEmployees = async () => {
     try {
-      const { data, error } = await supabase
+      const isSuper = currentUser?.is_super_user;
+      let unitIds: number[] = [];
+      if (!isSuper && currentUser?.id) {
+        const { data: links } = await supabase
+          .from("user_units")
+          .select("unit_id")
+          .eq("user_id", currentUser.id);
+        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+      }
+      const base = supabase
         .from("employees")
         .select(
           "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
-        .match(
-          currentUser?.is_super_user || !currentUser?.unit_id
-            ? {}
-            : { unit_id: currentUser.unit_id }
-        );
+      ;
+      const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
         setEmployees(data as Employee[]);
       } else {
@@ -68,11 +74,21 @@ export default function Employees() {
 
   const fetchUnits = async () => {
     try {
+      const isSuper = currentUser?.is_super_user;
+      let unitIds: number[] = [];
+      if (!isSuper && currentUser?.id) {
+        const { data: links } = await supabase
+          .from("user_units")
+          .select("unit_id")
+          .eq("user_id", currentUser.id);
+        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+      }
       const { data, error } = await supabase
         .from("units")
         .select("id, name, is_active, created_at, updated_at");
       if (!error && Array.isArray(data)) {
-        setUnits((data as Unit[]).filter((u) => u.is_active));
+        const list = (data as Unit[]).filter((u) => u.is_active);
+        setUnits(isSuper ? list : list.filter((u) => unitIds.includes(u.id)));
       } else {
         setUnits([]);
       }
@@ -83,15 +99,20 @@ export default function Employees() {
 
   const fetchAccommodations = async () => {
     try {
-      const { data, error } = await supabase
+      const isSuper = currentUser?.is_super_user;
+      let unitIds: number[] = [];
+      if (!isSuper && currentUser?.id) {
+        const { data: links } = await supabase
+          .from("user_units")
+          .select("unit_id")
+          .eq("user_id", currentUser.id);
+        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+      }
+      const base = supabase
         .from("accommodations")
         .select("id, name, unit_id, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .match(
-          currentUser?.is_super_user || !currentUser?.unit_id
-            ? {}
-            : { unit_id: currentUser.unit_id }
-        );
+        .eq("is_active", true);
+      const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
         setAccommodations(data as Accommodation[]);
       } else {
@@ -104,15 +125,20 @@ export default function Employees() {
 
   const fetchRooms = async () => {
     try {
-      const { data: accRows } = await supabase
+      const isSuper = currentUser?.is_super_user;
+      let unitIds: number[] = [];
+      if (!isSuper && currentUser?.id) {
+        const { data: links } = await supabase
+          .from("user_units")
+          .select("unit_id")
+          .eq("user_id", currentUser.id);
+        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+      }
+      const accBase = supabase
         .from("accommodations")
         .select("id")
-        .eq("is_active", true)
-        .match(
-          currentUser?.is_super_user || !currentUser?.unit_id
-            ? {}
-            : { unit_id: currentUser.unit_id }
-        );
+        .eq("is_active", true);
+      const { data: accRows } = isSuper || unitIds.length === 0 ? await accBase : await accBase.in("unit_id", unitIds);
       const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
       const { data, error } = await supabase
         .from("rooms")
@@ -392,7 +418,7 @@ export default function Employees() {
                     type="text"
                     value={formData.registration_number}
                     onChange={(e) =>
-                      setFormData({ ...formData, registration_number: e.target.value })
+                      setFormData({ ...formData, registration_number: e.target.value.toUpperCase() })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     required
@@ -405,7 +431,7 @@ export default function Employees() {
                   <input
                     type="text"
                     value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value.toUpperCase() })}
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     required
                   />
@@ -535,7 +561,7 @@ export default function Employees() {
                 <input
                   type="text"
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value.toUpperCase() })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   placeholder="Ex: Ativo, Férias, etc."
                 />
@@ -547,7 +573,7 @@ export default function Employees() {
                 </label>
                 <textarea
                   value={formData.observation}
-                  onChange={(e) => setFormData({ ...formData, observation: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, observation: e.target.value.toUpperCase() })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   rows={3}
                 />

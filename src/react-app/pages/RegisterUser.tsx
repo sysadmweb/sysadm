@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Unit } from "@/shared/types";
 import { Shield, User as UserIcon, ArrowLeft } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import * as bcrypt from "bcryptjs";
@@ -9,31 +8,16 @@ import * as bcrypt from "bcryptjs";
 export default function RegisterUser() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
-  const [units, setUnits] = useState<Unit[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     username: "",
     password: "",
     name: "",
-    unit_id: null as number | null,
     is_super_user: false,
   });
 
-  useEffect(() => {
-    const fetchUnits = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("units")
-          .select("id, name, is_active")
-          .eq("is_active", true);
-        if (!error && Array.isArray(data)) {
-          setUnits(data as Unit[]);
-        }
-      } catch { void 0; }
-    };
-    fetchUnits();
-  }, []);
+  useEffect(() => {}, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +28,6 @@ export default function RegisterUser() {
         username: formData.username.trim().toUpperCase(),
         password: formData.password,
         name: formData.name.trim().toUpperCase(),
-        unit_id: formData.unit_id,
         is_super_user: !!formData.is_super_user,
       };
       if (payload.password.length < 4) {
@@ -58,7 +41,6 @@ export default function RegisterUser() {
           username: payload.username,
           password_hash: pwHash,
           name: payload.name,
-          unit_id: payload.unit_id,
           is_super_user: payload.is_super_user,
           is_active: true,
         });
@@ -118,7 +100,7 @@ export default function RegisterUser() {
               <input
                 type="text"
                 value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value.toUpperCase() })}
                 className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
                 placeholder="Digite o usuário"
                 required
@@ -143,7 +125,7 @@ export default function RegisterUser() {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
               placeholder="Digite o nome"
               required
@@ -159,20 +141,6 @@ export default function RegisterUser() {
             >
               <option value="regular">Usuário Comum</option>
               <option value="super">Super Usuário</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Unidade</label>
-            <select
-              value={formData.unit_id || ""}
-              onChange={(e) => setFormData({ ...formData, unit_id: e.target.value ? parseInt(e.target.value) : null })}
-              className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
-            >
-              <option value="">Nenhuma</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
             </select>
           </div>
 

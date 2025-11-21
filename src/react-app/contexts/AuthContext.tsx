@@ -34,10 +34,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
+    const normalized = username.trim().toUpperCase();
     const { data: userRow, error } = await supabase
       .from("users")
-      .select("id, username, password_hash, name, is_super_user, unit_id, is_active, created_at, updated_at")
-      .eq("username", username)
+      .select("id, username, password_hash, name, is_super_user, is_active, created_at, updated_at")
+      .eq("username", normalized)
       .eq("is_active", true)
       .single();
     if (error || !userRow) {
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: userRow.username as string,
       name: userRow.name as string,
       is_super_user: !!userRow.is_super_user,
-      unit_id: (userRow.unit_id as number | null) ?? null,
+      unit_id: null,
       is_active: !!userRow.is_active,
       created_at: userRow.created_at as string,
       updated_at: userRow.updated_at as string,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { User, Unit } from "@/shared/types";
+import { User } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import * as bcrypt from "bcryptjs";
@@ -8,7 +8,6 @@ import { supabase } from "@/react-app/supabase";
 export default function Users() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -16,7 +15,6 @@ export default function Users() {
     username: "",
     password: "",
     name: "",
-    unit_id: null as number | null,
     is_super_user: false,
   });
   const [error, setError] = useState("");
@@ -32,20 +30,14 @@ export default function Users() {
 
   useEffect(() => {
     fetchUsers();
-    fetchUnits();
   }, []);
 
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("id, username, name, unit_id, is_super_user, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .match(
-          currentUser?.is_super_user || !currentUser?.unit_id
-            ? {}
-            : { unit_id: currentUser.unit_id }
-        );
+        .select("id, username, name, is_super_user, is_active, created_at, updated_at")
+        .eq("is_active", true);
       if (!error && Array.isArray(data)) {
         setUsers(data as User[]);
       } else {
@@ -58,26 +50,6 @@ export default function Users() {
     }
   };
 
-  const fetchUnits = async () => {
-    try {
-      const response = await fetch("/api/units", { credentials: "include" });
-      if (!response.ok) {
-        const { data, error } = await supabase
-          .from("units")
-          .select("id, name, is_active, created_at, updated_at");
-        if (!error && Array.isArray(data)) {
-          setUnits((data as Unit[]).filter((u) => u.is_active));
-        } else {
-          setUnits([]);
-        }
-        return;
-      }
-      const data = (await response.json()) as { units: Unit[] };
-      setUnits(Array.isArray(data.units) ? data.units : []);
-    } catch (error) {
-      console.error("Error fetching units:", error);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +60,6 @@ export default function Users() {
       if (editingUser) {
         const payload = {
           name: formData.name.toUpperCase(),
-          unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
         };
         const { error: upErr } = await supabase
           .from("users")
@@ -118,7 +89,6 @@ export default function Users() {
           username: formData.username.toUpperCase(),
           password: formData.password,
           name: formData.name.toUpperCase(),
-          unit_id: currentUser?.is_super_user ? formData.unit_id : currentUser?.unit_id ?? formData.unit_id,
           is_super_user: !!formData.is_super_user,
         };
         const pwHash = payload.password ? await hashPassword(payload.password) : "";
@@ -128,7 +98,6 @@ export default function Users() {
             username: payload.username,
             password_hash: pwHash,
             name: payload.name,
-            unit_id: payload.unit_id,
             is_super_user: !!payload.is_super_user,
             is_active: true,
           });
@@ -143,7 +112,7 @@ export default function Users() {
 
       setShowModal(false);
       setEditingUser(null);
-      setFormData({ username: "", password: "", name: "", unit_id: null, is_super_user: false });
+      setFormData({ username: "", password: "", name: "", is_super_user: false });
       fetchUsers();
       showToast(editingUser ? "Usuário atualizado" : "Usuário criado", "success");
     } catch (error) {
@@ -182,7 +151,6 @@ export default function Users() {
       username: user.username,
       password: "",
       name: user.name,
-      unit_id: user.unit_id,
       is_super_user: !!user.is_super_user,
     });
     setShowModal(true);
@@ -215,7 +183,7 @@ export default function Users() {
         <button
           onClick={() => {
             setEditingUser(null);
-            setFormData({ username: "", password: "", name: "", unit_id: null, is_super_user: false });
+            setFormData({ username: "", password: "", name: "", is_super_user: false });
             setShowModal(true);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
@@ -225,14 +193,13 @@ export default function Users() {
         </button>
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
-        <table className="w-full">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 shadow-xl overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <table className="min-w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Usuário</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Tipo</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Unidade</th>
               <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Ações</th>
             </tr>
           </thead>
@@ -255,9 +222,6 @@ export default function Users() {
                   ) : (
                     <span className="text-slate-400">Usuário Comum</span>
                   )}
-                </td>
-                <td className="px-6 py-4 text-slate-300">
-                  {units.find((u) => u.id === user.unit_id)?.name || "-"}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
@@ -298,7 +262,7 @@ export default function Users() {
                 <input
                   type="text"
                   value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value.toUpperCase() })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   required
                   disabled={!!editingUser}
@@ -325,7 +289,7 @@ export default function Users() {
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   required
                 />
@@ -347,28 +311,6 @@ export default function Users() {
                 >
                   <option value="regular">Usuário Comum</option>
                   <option value="super">Super Usuário</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Unidade
-                </label>
-                <select
-                  value={formData.unit_id || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      unit_id: e.target.value ? parseInt(e.target.value) : null,
-                    })
-                  }
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                  <option value="">Nenhuma</option>
-                  {units.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.name}
-                    </option>
-                  ))}
                 </select>
               </div>
               <div className="flex gap-3 pt-4">
