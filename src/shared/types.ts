@@ -207,3 +207,80 @@ export type CreateEmployeeInput = z.infer<typeof CreateEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof UpdateEmployeeSchema>;
 
 export type DashboardStats = z.infer<typeof DashboardStatsSchema>;
+
+// Product schemas
+export const ProductSchema = z.object({
+  id: z.number(),
+  code: z.string(),
+  name: z.string(),
+  quantity: z.number(),
+  unit_value: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateProductSchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  quantity: z.number(),
+  unit_value: z.number(),
+});
+
+// Invoice schemas
+export const InvoiceSchema = z.object({
+  id: z.number(),
+  number: z.string(),
+  series: z.string().nullable(),
+  issuer_name: z.string(),
+  issuer_tax_id: z.string(),
+  issue_date: z.string().nullable(),
+  access_key: z.string().nullable(),
+  xml_content: z.string().nullable(),
+  code: z.string().nullable(),
+  total_value: z.number().default(0),
+  created_at: z.string(),
+});
+
+export const CreateInvoiceSchema = z.object({
+  number: z.string().min(1),
+  series: z.string().nullable(),
+  issuer_name: z.string().min(1),
+  issuer_tax_id: z.string().min(1),
+  issue_date: z.string().nullable(),
+  access_key: z.string().nullable(),
+  xml_content: z.string().nullable(),
+  code: z.string().nullable(),
+  total_value: z.number().default(0),
+});
+
+// Invoice Item schemas
+export const InvoiceItemSchema = z.object({
+  id: z.number(),
+  invoice_id: z.number(),
+  product_id: z.number().nullable(),
+  product_code: z.string(),
+  product_name: z.string(),
+  quantity: z.number(),
+  unit_value: z.number(),
+  total_value: z.number(),
+  created_at: z.string(),
+});
+
+export const CreateInvoiceItemSchema = z.object({
+  invoice_id: z.number(),
+  product_id: z.number().nullable(),
+  product_code: z.string(),
+  product_name: z.string(),
+  quantity: z.number(),
+  unit_value: z.number(),
+  total_value: z.number(),
+});
+
+export type Product = z.infer<typeof ProductSchema>;
+export type CreateProductInput = z.infer<typeof CreateProductSchema>;
+
+export type Invoice = z.infer<typeof InvoiceSchema>;
+export type CreateInvoiceInput = z.infer<typeof CreateInvoiceSchema>;
+
+export type InvoiceItem = z.infer<typeof InvoiceItemSchema>;
+export type CreateInvoiceItemInput = z.infer<typeof CreateInvoiceItemSchema>;

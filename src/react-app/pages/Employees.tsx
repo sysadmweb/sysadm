@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Edit, Trash2, Loader2, UserCircle } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search } from "lucide-react";
 
 export default function Employees() {
   const { user: currentUser } = useAuth();
@@ -14,6 +14,9 @@ export default function Employees() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortKey, setSortKey] = useState<"registration_number" | "full_name" | "function" | "unit" | "room" | "status">("full_name");
+  const [sortAsc, setSortAsc] = useState(true);
   const [formData, setFormData] = useState({
     registration_number: "",
     full_name: "",
@@ -297,6 +300,45 @@ export default function Employees() {
     ? rooms.filter((r) => r.accommodation_id === formData.accommodation_id)
     : [];
 
+  const displayedEmployees = (() => {
+    const term = (searchTerm || "").toUpperCase();
+    const filtered = employees.filter((e) => (e.full_name || "").toUpperCase().includes(term));
+    const getFunctionName = (id: number | null) => functions.find((f) => f.id === id)?.name || "";
+    const getUnitName = (id: number | null | undefined) => units.find((u) => u.id === (id ?? -1))?.name || "";
+    const compare = (a: Employee, b: Employee) => {
+      let va: string | number = "";
+      let vb: string | number = "";
+      if (sortKey === "registration_number") {
+        va = a.registration_number || "";
+        vb = b.registration_number || "";
+      } else if (sortKey === "full_name") {
+        va = a.full_name || "";
+        vb = b.full_name || "";
+      } else if (sortKey === "function") {
+        va = getFunctionName(a.function_id);
+        vb = getFunctionName(b.function_id);
+      } else if (sortKey === "unit") {
+        va = getUnitName(a.unit_id);
+        vb = getUnitName(b.unit_id);
+      } else if (sortKey === "room") {
+        va = a.room_id ?? 0;
+        vb = b.room_id ?? 0;
+      } else if (sortKey === "status") {
+        va = a.status || "";
+        vb = b.status || "";
+      }
+      if (typeof va === "number" && typeof vb === "number") {
+        return sortAsc ? va - vb : vb - va;
+      }
+      const sa = String(va).toUpperCase();
+      const sb = String(vb).toUpperCase();
+      if (sa < sb) return sortAsc ? -1 : 1;
+      if (sa > sb) return sortAsc ? 1 : -1;
+      return 0;
+    };
+    return filtered.slice().sort(compare);
+  })();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -321,17 +363,30 @@ export default function Employees() {
           <h1 className="text-3xl font-bold text-slate-100">Funcionários</h1>
           <p className="text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingEmployee(null);
-            resetFormData();
-            setShowModal(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Funcionário
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setEditingEmployee(null);
+              resetFormData();
+              setShowModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
+          >
+            <Plus className="w-5 h-5" />
+            Novo Funcionário
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
+        <Search className="w-5 h-5 text-slate-400" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
+          className="bg-transparent border-none text-slate-200 placeholder-slate-500 focus:outline-none w-64"
+          placeholder="Buscar por nome"
+        />
       </div>
 
       <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
@@ -339,17 +394,43 @@ export default function Employees() {
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700/50">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Matrícula</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Função</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Unidade</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Quarto</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Status</th>
+                {[
+                  { key: "registration_number", label: "Matrícula" },
+                  { key: "full_name", label: "Nome" },
+                  { key: "function", label: "Função" },
+                  { key: "unit", label: "Unidade" },
+                  { key: "room", label: "Quarto" },
+                  { key: "status", label: "Status" },
+                ].map((col) => (
+                  <th key={col.key} className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (sortKey === col.key) {
+                          setSortAsc(!sortAsc);
+                        } else {
+                          setSortKey(col.key as typeof sortKey);
+                          setSortAsc(true);
+                        }
+                      }}
+                      className="flex items-center gap-1 hover:text-slate-100"
+                    >
+                      <span>{col.label}</span>
+                      {sortKey === col.key ? (
+                        sortAsc ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )
+                      ) : null}
+                    </button>
+                  </th>
+                ))}
                 <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
-              {employees.map((employee) => (
+              {displayedEmployees.map((employee) => (
                 <tr key={employee.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="px-6 py-4">
                     <span className="text-slate-400 font-mono text-sm">

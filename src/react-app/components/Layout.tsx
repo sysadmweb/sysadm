@@ -13,6 +13,11 @@ import {
   UserCircle,
   LogOut,
   UserLock,
+  ShoppingCart,
+  FileText,
+  Upload,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 export default function Layout() {
@@ -21,6 +26,13 @@ export default function Layout() {
   const [dbStatus, setDbStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const { get } = usePermissions();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+
+  const toggleMenu = (key: string) => {
+    setExpandedMenus((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
 
   useEffect(() => {
     const check = async () => {
@@ -36,10 +48,20 @@ export default function Layout() {
     { path: "/accommodations", icon: Home, label: "Alojamentos", key: "accommodations" },
     { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
     { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
+    {
+      path: "/purchases",
+      icon: ShoppingCart,
+      label: "Compras",
+      key: "purchases",
+      children: [
+        { path: "/purchases/xml", icon: Upload, label: "Lançar XML" },
+        { path: "/purchases/view", icon: FileText, label: "Visualizar Nota" },
+      ],
+    },
     ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades", key: "units" }] : []),
     ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários", key: "users" }] : []),
     ...(user?.is_super_user ? [{ path: "/permissions", icon: UserLock, label: "Regras", key: "permissions" }] : []),
-  ].filter((item) => get(item.key).can_view);
+  ].filter((item) => item.key === "purchases" || get(item.key).can_view);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -73,20 +95,59 @@ export default function Layout() {
 
         <nav className="p-4 space-y-2">
           {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  isActive
-                    ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-                }`
-              }
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
-            </NavLink>
+            <div key={item.key}>
+              {item.children ? (
+                <div>
+                  <button
+                    onClick={() => toggleMenu(item.key)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 ${expandedMenus.includes(item.key) ? "bg-slate-800/30" : ""
+                      }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="w-5 h-5" />
+                      <span className="font-medium">{item.label}</span>
+                    </div>
+                    {expandedMenus.includes(item.key) ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </button>
+                  {expandedMenus.includes(item.key) && (
+                    <div className="ml-4 mt-1 space-y-1 border-l border-slate-700/50 pl-2">
+                      {item.children.map((child) => (
+                        <NavLink
+                          key={child.path}
+                          to={child.path}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${isActive
+                              ? "text-blue-400 bg-blue-500/10"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                            }`
+                          }
+                        >
+                          <child.icon className="w-4 h-4" />
+                          <span>{child.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                      ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                    }`
+                  }
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              )}
+            </div>
           ))}
         </nav>
 
@@ -134,10 +195,9 @@ export default function Layout() {
                   to={item.path}
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                      ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
                     }`
                   }
                 >

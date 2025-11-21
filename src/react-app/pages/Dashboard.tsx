@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
-import { Bed, Loader2, UserCheck, HouseIcon, Home } from "lucide-react";
+import { Loader2, UserCheck, HouseIcon, Home, DollarSign, UserCheck2Icon, User2, UserCheck2, User2Icon, UserSquare2Icon, TagIcon } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useAuth } from "@/react-app/contexts/AuthContext";
@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [employeesData, setEmployeesData] = useState<{ registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; is_active: boolean }[]>([]);
   const [functionsData, setFunctionsData] = useState<{ id: number; name: string }[]>([]);
   const [unitsData, setUnitsData] = useState<{ id: number; name: string }[]>([]);
+  const [totalCost, setTotalCost] = useState(0);
 
   useEffect(() => {
     fetchStats();
@@ -52,15 +53,19 @@ export default function Dashboard() {
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
-      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }] = await Promise.all([
+      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }, { data: invoices }] = await Promise.all([
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
         supabase.from("functions").select("id, name"),
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? supabase.from("units").select("id, name") : supabase.from("units").select("id, name").in("id", unitIds),
+        supabase.from("invoices").select("total_value"),
       ]);
       const activeAccommodations = Array.isArray(accRows) ? accRows.length : 0;
+
+      const calculatedTotalCost = invoices?.reduce((sum, inv) => sum + (inv.total_value || 0), 0) || 0;
+      setTotalCost(calculatedTotalCost);
 
       const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
       const { data: roomsData } = await supabase
@@ -121,7 +126,7 @@ export default function Dashboard() {
   }
 
   const statCards = [
- 
+
     {
       label: "Funcionários Ativos",
       value: stats?.active_employees || 0,
@@ -130,25 +135,25 @@ export default function Dashboard() {
       bgColor: "bg-green-500/10",
     },
     {
-      label: "Camas Ocupadas",
-      value: stats?.occupied_beds || 0,
-      icon: Bed,
-      color: "from-purple-500 to-pink-500",
-      bgColor: "bg-purple-500/10",
-    },
-    {
       label: "Vagas Disponíveis",
       value: stats?.available_beds || 0,
-      icon: HouseIcon,
-      color: "from-gray-500 to-green-500",
+      icon: TagIcon,
+      color: "from-purple-500 to-blue-500",
       bgColor: "bg-green-500/10",
     },
-       {
+    {
       label: "Total de Alojamentos",
       value: stats?.total_accommodations || 0,
       icon: Home,
       color: "from-blue-500 to-cyan-500",
       bgColor: "bg-blue-500/10",
+    },
+    {
+      label: "Custo Total Obra",
+      value: totalCost.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      icon: DollarSign,
+      color: "from-yellow-500 to-orange-500",
+      bgColor: "bg-yellow-500/10",
     }
   ];
 
@@ -225,9 +230,8 @@ export default function Dashboard() {
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all duration-500"
                     style={{
-                      width: `${
-                        (item.count / (stats.total_employees || 1)) * 100
-                      }%`,
+                      width: `${(item.count / (stats.total_employees || 1)) * 100
+                        }%`,
                     }}
                   />
                 </div>

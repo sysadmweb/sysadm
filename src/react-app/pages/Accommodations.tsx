@@ -8,6 +8,7 @@ export default function Accommodations() {
   const { user: currentUser } = useAuth();
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [employeeCounts, setEmployeeCounts] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null);
@@ -25,6 +26,7 @@ export default function Accommodations() {
   useEffect(() => {
     fetchAccommodations();
     fetchUnits();
+    fetchEmployeeCounts();
   }, []);
 
   const fetchAccommodations = async () => {
@@ -52,6 +54,28 @@ export default function Accommodations() {
       console.error("Error fetching accommodations:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchEmployeeCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("accommodation_id")
+        .eq("is_active", true)
+        .not("accommodation_id", "is", null);
+
+      if (!error && data) {
+        const counts: Record<number, number> = {};
+        data.forEach((emp) => {
+          if (emp.accommodation_id) {
+            counts[emp.accommodation_id] = (counts[emp.accommodation_id] || 0) + 1;
+          }
+        });
+        setEmployeeCounts(counts);
+      }
+    } catch (error) {
+      console.error("Error fetching employee counts:", error);
     }
   };
 
@@ -157,9 +181,8 @@ export default function Accommodations() {
     <div className="space-y-6">
       {toast && (
         <div
-          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
-            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
-          }`}
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+            }`}
         >
           {toast.text}
         </div>
@@ -188,7 +211,7 @@ export default function Accommodations() {
             <tr>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Unidade</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Data de Criação</th>
+              <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">Quantidade Funcionario</th>
               <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Ações</th>
             </tr>
           </thead>
@@ -204,8 +227,8 @@ export default function Accommodations() {
                 <td className="px-6 py-4 text-slate-300">
                   {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
                 </td>
-                <td className="px-6 py-4 text-slate-400">
-                  {new Date(accommodation.created_at).toLocaleDateString("pt-BR")}
+                <td className="px-6 py-4 text-center text-slate-400">
+                  {employeeCounts[accommodation.id] || 0}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">

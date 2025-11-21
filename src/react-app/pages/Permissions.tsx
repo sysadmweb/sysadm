@@ -40,6 +40,7 @@ export default function Permissions() {
       "units",
       "users",
       "permissions",
+      "purchases",
     ],
     []
   );
