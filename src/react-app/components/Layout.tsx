@@ -61,7 +61,7 @@ export default function Layout() {
     ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades", key: "units" }] : []),
     ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários", key: "users" }] : []),
     ...(user?.is_super_user ? [{ path: "/permissions", icon: UserLock, label: "Regras", key: "permissions" }] : []),
-  ].filter((item) => item.key === "purchases" || get(item.key).can_view);
+  ].filter((item) => get(item.key).can_view);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -190,20 +190,61 @@ export default function Layout() {
             </div>
             <nav className="p-4 space-y-2">
               {navItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                      ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-                    }`
-                  }
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </NavLink>
+                <div key={item.key}>
+                  {item.children ? (
+                    <div>
+                      <button
+                        onClick={() => toggleMenu(item.key)}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 ${expandedMenus.includes(item.key) ? "bg-slate-800/30" : ""
+                          }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className="w-5 h-5" />
+                          <span className="font-medium">{item.label}</span>
+                        </div>
+                        {expandedMenus.includes(item.key) ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4" />
+                        )}
+                      </button>
+                      {expandedMenus.includes(item.key) && (
+                        <div className="ml-4 mt-1 space-y-1 border-l border-slate-700/50 pl-2">
+                          {item.children.map((child) => (
+                            <NavLink
+                              key={child.path}
+                              to={child.path}
+                              onClick={() => setMobileOpen(false)}
+                              className={({ isActive }) =>
+                                `flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${isActive
+                                  ? "text-blue-400 bg-blue-500/10"
+                                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                                }`
+                              }
+                            >
+                              <child.icon className="w-4 h-4" />
+                              <span>{child.label}</span>
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <NavLink
+                      to={item.path}
+                      onClick={() => setMobileOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                          ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 shadow-lg shadow-blue-500/10"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                        }`
+                      }
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span className="font-medium">{item.label}</span>
+                    </NavLink>
+                  )}
+                </div>
               ))}
             </nav>
           </div>
