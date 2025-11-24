@@ -187,10 +187,10 @@ export default function Accommodations() {
           {toast.text}
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100">Alojamentos</h1>
-          <p className="text-slate-400 mt-1">Gerencie os alojamentos das unidades</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Alojamentos</h1>
+          <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os alojamentos das unidades</p>
         </div>
         <button
           onClick={() => {
@@ -198,14 +198,15 @@ export default function Accommodations() {
             setFormData({ name: "", unit_id: units[0]?.id || 0 });
             setShowModal(true);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
+          className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
         >
           <Plus className="w-5 h-5" />
           Novo Alojamento
         </button>
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
+      {/* Desktop View */}
+      <div className="hidden md:block bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
         <table className="w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
@@ -250,6 +251,48 @@ export default function Accommodations() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile View */}
+      <div className="md:hidden space-y-4">
+        {accommodations.map((accommodation) => (
+          <div key={accommodation.id} className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 shadow-xl">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-800 rounded-lg">
+                  <Home className="w-5 h-5 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-slate-200 font-medium text-sm">{accommodation.name}</h3>
+                  <p className="text-slate-400 text-xs">
+                    {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => openEditModal(accommodation)}
+                  className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(accommodation.id)}
+                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
+              <span className="text-slate-400 text-xs">Funcionários</span>
+              <span className="text-slate-200 font-medium text-sm">
+                {employeeCounts[accommodation.id] || 0}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Modal */}

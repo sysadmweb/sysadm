@@ -61,7 +61,7 @@ export default function Employees() {
           "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
-      ;
+        ;
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
         setEmployees(data as Employee[]);
@@ -351,26 +351,25 @@ export default function Employees() {
     <div className="space-y-6">
       {toast && (
         <div
-          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
-            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
-          }`}
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+            }`}
         >
           {toast.text}
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100">Funcionários</h1>
-          <p className="text-slate-400 mt-1">Gerencie os funcionários das obras</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Funcionários</h1>
+          <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="w-full md:w-auto flex items-center gap-3">
           <button
             onClick={() => {
               setEditingEmployee(null);
               resetFormData();
               setShowModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
           >
             <Plus className="w-5 h-5" />
             Novo Funcionário
@@ -378,18 +377,19 @@ export default function Employees() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
+      <div className="flex items-center gap-3 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-full md:w-fit">
         <Search className="w-5 h-5 text-slate-400" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
-          className="bg-transparent border-none text-slate-200 placeholder-slate-500 focus:outline-none w-64"
+          className="bg-transparent border-none text-slate-200 placeholder-slate-500 focus:outline-none w-full md:w-64"
           placeholder="Buscar por nome"
         />
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
+      {/* Desktop View */}
+      <div className="hidden md:block bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-slate-700/50">
@@ -480,6 +480,70 @@ export default function Employees() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile View */}
+      <div className="md:hidden space-y-4">
+        {displayedEmployees.map((employee) => (
+          <div key={employee.id} className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 shadow-xl">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-800 rounded-lg">
+                  <UserCircle className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-slate-200 font-medium text-sm">{employee.full_name}</h3>
+                  <p className="text-slate-400 text-xs font-mono">{employee.registration_number}</p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => openEditModal(employee)}
+                  className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(employee.id)}
+                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/50">
+              <div>
+                <p className="text-slate-400 text-xs">Função</p>
+                <p className="text-slate-200 text-sm">
+                  {functions.find((f) => f.id === employee.function_id)?.name || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Unidade</p>
+                <p className="text-slate-200 text-sm">
+                  {units.find((u) => u.id === employee.unit_id)?.name || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Quarto</p>
+                <div className="text-slate-200 text-sm">
+                  {employee.room_id ? (
+                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">
+                      Quarto {employee.room_id}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 text-xs">Sem quarto</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Status</p>
+                <p className="text-slate-200 text-sm">{employee.status || "-"}</p>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Modal */}
