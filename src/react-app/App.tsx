@@ -10,6 +10,7 @@ import FunctionsPage from "@/react-app/pages/Functions";
 import AccommodationsPage from "@/react-app/pages/Accommodations";
 import RoomsPage from "@/react-app/pages/Rooms";
 import EmployeesPage from "@/react-app/pages/Employees";
+import InspectionPage from "@/react-app/pages/Inspection";
 import PurchasesXmlPage from "@/react-app/pages/PurchasesXml";
 import PurchasesViewPage from "@/react-app/pages/PurchasesView";
 import Layout from "@/react-app/components/Layout";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="accommodations" element={<AccommodationsPage />} />
             <Route path="rooms" element={<RoomsPage />} />
             <Route path="employees" element={<EmployeesPage />} />
+            <Route path="inspection" element={<InspectionPage />} />
             <Route path="purchases/xml" element={<PurchasesXmlPage />} />
             <Route path="purchases/view" element={<PurchasesViewPage />} />
             <Route path="permissions" element={<PermissionsPage />} />

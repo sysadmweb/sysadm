@@ -287,3 +287,42 @@ export type CreateInvoiceInput = z.infer<typeof CreateInvoiceSchema>;
 
 export type InvoiceItem = z.infer<typeof InvoiceItemSchema>;
 export type CreateInvoiceItemInput = z.infer<typeof CreateInvoiceItemSchema>;
+
+// Inspection schemas
+export const InspectionSchema = z.object({
+  id: z.number(),
+  accommodation_id: z.number(),
+  employee_id: z.number().nullable(),
+  inspection_date: z.string(),
+  status: z.string(),
+  observations: z.string().nullable(),
+  photo_url: z.string().nullable().optional(),
+  title: z.string().optional(),
+  user_id: z.number().optional(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateInspectionSchema = z.object({
+  accommodation_id: z.number(),
+  employee_id: z.number().nullable(),
+  inspection_date: z.string(),
+  status: z.string(),
+  observations: z.string().nullable(),
+  photo_url: z.string().nullable().optional(),
+  title: z.string().optional(),
+  user_id: z.number().optional(),
+});
+
+export const UpdateInspectionSchema = z.object({
+  accommodation_id: z.number().optional(),
+  employee_id: z.number().nullable().optional(),
+  inspection_date: z.string().optional(),
+  status: z.string().optional(),
+  observations: z.string().nullable().optional(),
+});
+
+export type Inspection = z.infer<typeof InspectionSchema>;
+export type CreateInspectionInput = z.infer<typeof CreateInspectionSchema>;
+export type UpdateInspectionInput = z.infer<typeof UpdateInspectionSchema>;
