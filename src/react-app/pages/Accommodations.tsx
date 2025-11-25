@@ -15,6 +15,7 @@ export default function Accommodations() {
   const [formData, setFormData] = useState({
     name: "",
     unit_id: 0,
+    bed_count: 0,
   });
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
@@ -42,7 +43,7 @@ export default function Accommodations() {
       }
       const base = supabase
         .from("accommodations")
-        .select("id, name, unit_id, is_active, created_at, updated_at")
+        .select("id, name, unit_id, bed_count, is_active, created_at, updated_at")
         .eq("is_active", true);
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
@@ -108,11 +109,11 @@ export default function Accommodations() {
     e.preventDefault();
 
     try {
-      const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id };
+      const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id, bed_count: formData.bed_count };
       if (editingAccommodation) {
         const { error } = await supabase
           .from("accommodations")
-          .update({ name: payload.name, unit_id: payload.unit_id })
+          .update({ name: payload.name, unit_id: payload.unit_id, bed_count: payload.bed_count })
           .eq("id", editingAccommodation.id);
         if (error) {
           showToast("Falha ao salvar alojamento", "error");
@@ -122,7 +123,7 @@ export default function Accommodations() {
       } else {
         const { error } = await supabase
           .from("accommodations")
-          .insert({ name: payload.name, unit_id: payload.unit_id, is_active: true });
+          .insert({ name: payload.name, unit_id: payload.unit_id, bed_count: payload.bed_count, is_active: true });
         if (error) {
           showToast("Falha ao cadastrar alojamento", "error");
           return;
@@ -132,7 +133,7 @@ export default function Accommodations() {
 
       setShowModal(false);
       setEditingAccommodation(null);
-      setFormData({ name: "", unit_id: 0 });
+      setFormData({ name: "", unit_id: 0, bed_count: 0 });
       fetchAccommodations();
     } catch (error) {
       console.error("Error saving accommodation:", error);
@@ -165,6 +166,7 @@ export default function Accommodations() {
     setFormData({
       name: accommodation.name,
       unit_id: accommodation.unit_id,
+      bed_count: accommodation.bed_count || 0,
     });
     setShowModal(true);
   };
@@ -195,7 +197,7 @@ export default function Accommodations() {
         <button
           onClick={() => {
             setEditingAccommodation(null);
-            setFormData({ name: "", unit_id: units[0]?.id || 0 });
+            setFormData({ name: "", unit_id: units[0]?.id || 0, bed_count: 0 });
             setShowModal(true);
           }}
           className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
@@ -212,6 +214,7 @@ export default function Accommodations() {
             <tr>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
               <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Unidade</th>
+              <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">Camas</th>
               <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">Quantidade Funcionario</th>
               <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Ações</th>
             </tr>
@@ -227,6 +230,9 @@ export default function Accommodations() {
                 </td>
                 <td className="px-6 py-4 text-slate-300">
                   {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
+                </td>
+                <td className="px-6 py-4 text-center text-slate-400">
+                  {accommodation.bed_count || 0}
                 </td>
                 <td className="px-6 py-4 text-center text-slate-400">
                   {employeeCounts[accommodation.id] || 0}
@@ -266,6 +272,9 @@ export default function Accommodations() {
                   <h3 className="text-slate-200 font-medium text-sm">{accommodation.name}</h3>
                   <p className="text-slate-400 text-xs">
                     {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {accommodation.bed_count || 0} camas
                   </p>
                 </div>
               </div>
@@ -334,6 +343,19 @@ export default function Accommodations() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Quantidade de Camas
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.bed_count}
+                  onChange={(e) => setFormData({ ...formData, bed_count: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  required
+                />
               </div>
               <div className="flex gap-3 pt-4">
                 <button

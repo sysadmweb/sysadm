@@ -23,8 +23,7 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      type RoomLite = { id: number; bed_count: number };
-      type EmployeeLite = { id: number; registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; room_id: number | null; is_active: boolean };
+      type EmployeeLite = { id: number; registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean };
       type FunctionLite = { id: number; name: string };
       type UnitLite = { id: number; name: string };
 
@@ -38,7 +37,7 @@ export default function Dashboard() {
         .eq("is_active", true);
       const employeesQuery = supabase
         .from("employees")
-        .select("id, registration_number, full_name, function_id, unit_id, room_id, is_active");
+        .select("id, registration_number, full_name, function_id, unit_id, accommodation_id, is_active");
       const accommodationsQuery = supabase
         .from("accommodations")
         .select("id")
@@ -68,16 +67,17 @@ export default function Dashboard() {
       setTotalCost(calculatedTotalCost);
 
       const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
-      const { data: roomsData } = await supabase
-        .from("rooms")
-        .select("id, bed_count, accommodation_id")
-        .in("accommodation_id", accIds.length ? accIds : [-1]);
-      const roomsList = Array.isArray(roomsData) ? (roomsData as RoomLite[]) : [];
+      const { data: accommodationsWithBeds } = await supabase
+        .from("accommodations")
+        .select("id, bed_count")
+        .in("id", accIds.length ? accIds : [-1])
+        .eq("is_active", true);
+      const accommodationsList = Array.isArray(accommodationsWithBeds) ? (accommodationsWithBeds as { id: number; bed_count: number }[]) : [];
       const employeesList = Array.isArray(employees) ? (employees as EmployeeLite[]) : [];
       const functionsList = Array.isArray(functions) ? (functions as FunctionLite[]) : [];
 
-      const total_beds = roomsList.reduce((sum, r) => sum + r.bed_count, 0);
-      const occupied_beds = employeesList.filter((e) => e.is_active && e.room_id != null).length;
+      const total_beds = accommodationsList.reduce((sum, a) => sum + (a.bed_count || 0), 0);
+      const occupied_beds = employeesList.filter((e) => e.is_active && e.accommodation_id != null).length;
       const available_beds = Math.max(total_beds - occupied_beds, 0);
       const active_employees = Array.isArray(activeEmployeesRows) ? activeEmployeesRows.length : 0;
 
@@ -135,8 +135,8 @@ export default function Dashboard() {
       bgColor: "bg-green-500/10",
     },
     {
-      label: "Vagas Disponíveis",
-      value: stats?.available_beds || 0,
+      label: "Vagas Ocupadas",
+      value: `${stats?.occupied_beds || 0}/${stats?.total_beds || 0}`,
       icon: TagIcon,
       color: "from-purple-500 to-blue-500",
       bgColor: "bg-green-500/10",

@@ -81,6 +81,7 @@ export const AccommodationSchema = z.object({
   id: z.number(),
   name: z.string(),
   unit_id: z.number(),
+  bed_count: z.number().default(0),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -89,11 +90,13 @@ export const AccommodationSchema = z.object({
 export const CreateAccommodationSchema = z.object({
   name: z.string().min(1),
   unit_id: z.number(),
+  bed_count: z.number().default(0),
 });
 
 export const UpdateAccommodationSchema = z.object({
   name: z.string().min(1).optional(),
   unit_id: z.number().optional(),
+  bed_count: z.number().optional(),
   is_active: z.boolean().optional(),
 });
 

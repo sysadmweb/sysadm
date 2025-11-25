@@ -399,7 +399,7 @@ export default function Employees() {
                   { key: "full_name", label: "Nome" },
                   { key: "function", label: "Função" },
                   { key: "unit", label: "Unidade" },
-                  { key: "room", label: "Quarto" },
+                  { key: "accommodation", label: "Alojamento" },
                   { key: "status", label: "Status" },
                 ].map((col) => (
                   <th key={col.key} className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
@@ -449,14 +449,8 @@ export default function Employees() {
                   <td className="px-6 py-4 text-slate-300">
                     {units.find((u) => u.id === employee.unit_id)?.name || "-"}
                   </td>
-                  <td className="px-6 py-4">
-                    {employee.room_id ? (
-                      <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-sm">
-                        Quarto {employee.room_id}
-                      </span>
-                    ) : (
-                      <span className="text-slate-500 text-sm">Sem quarto</span>
-                    )}
+                  <td className="px-6 py-4 text-slate-300">
+                    {accommodations.find((a) => a.id === employee.accommodation_id)?.name || "-"}
                   </td>
                   <td className="px-6 py-4 text-slate-300">{employee.status || "-"}</td>
                   <td className="px-6 py-4">
@@ -526,16 +520,10 @@ export default function Employees() {
                 </p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Quarto</p>
-                <div className="text-slate-200 text-sm">
-                  {employee.room_id ? (
-                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">
-                      Quarto {employee.room_id}
-                    </span>
-                  ) : (
-                    <span className="text-slate-500 text-xs">Sem quarto</span>
-                  )}
-                </div>
+                <p className="text-slate-400 text-xs">Alojamento</p>
+                <p className="text-slate-200 text-xs">
+                  {accommodations.find((a) => a.id === employee.accommodation_id)?.name || "-"}
+                </p>
               </div>
               <div>
                 <p className="text-slate-400 text-xs">Status</p>

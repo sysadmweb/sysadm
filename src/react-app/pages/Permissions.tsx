@@ -45,6 +45,18 @@ export default function Permissions() {
     []
   );
 
+  const pageLabels: Record<string, string> = {
+    dashboard: "Dashboard",
+    employees: "Funcionários",
+    accommodations: "Alojamentos",
+    rooms: "Quartos",
+    functions: "Funções",
+    units: "Unidades",
+    users: "Usuários",
+    permissions: "Regras",
+    purchases: "Compras",
+  };
+
   useEffect(() => {
     const load = async () => {
       const { data: usersData } = await supabase
@@ -170,7 +182,7 @@ export default function Permissions() {
           <tbody className="divide-y divide-slate-700/50">
             {perms.map((p, idx) => (
               <tr key={`${p.user_id}-${p.page}`} className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 text-slate-300">{p.page}</td>
+                <td className="px-6 py-4 text-slate-300">{pageLabels[p.page] || p.page}</td>
                 <td className="px-6 py-4 text-center">
                   <input
                     type="checkbox"

@@ -9,7 +9,6 @@ import {
   Building2,
   Briefcase,
   Home,
-  Bed,
   UserCircle,
   LogOut,
   UserLock,
@@ -46,7 +45,7 @@ export default function Layout() {
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
     { path: "/employees", icon: UserCircle, label: "Funcionários", key: "employees" },
     { path: "/accommodations", icon: Home, label: "Alojamentos", key: "accommodations" },
-    { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
+    // { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
     { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
     {
       path: "/purchases",
