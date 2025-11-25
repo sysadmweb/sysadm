@@ -148,7 +148,8 @@ export default function Inspection() {
             reader.readAsDataURL(file);
         } else {
             const arr = Array.from(files);
-            setFormData({ ...formData, photos: arr });
+            const nextPhotos = [...formData.photos, ...arr];
+            setFormData({ ...formData, photos: nextPhotos });
             Promise.all(
                 arr.map(
                     (file) =>
@@ -158,7 +159,7 @@ export default function Inspection() {
                             reader.readAsDataURL(file);
                         })
                 )
-            ).then((list) => setPhotoPreviews(list));
+            ).then((list) => setPhotoPreviews((prev) => [...prev, ...list]));
         }
     };
 
@@ -682,6 +683,7 @@ export default function Inspection() {
                                                 type="file"
                                                 accept="image/*"
                                                 multiple
+                                                capture="environment"
                                                 onChange={handleFileChange}
                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                                 required={!editingInspection && photoPreviews.length === 0}
