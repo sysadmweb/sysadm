@@ -326,3 +326,23 @@ export const UpdateInspectionSchema = z.object({
 export type Inspection = z.infer<typeof InspectionSchema>;
 export type CreateInspectionInput = z.infer<typeof CreateInspectionSchema>;
 export type UpdateInspectionInput = z.infer<typeof UpdateInspectionSchema>;
+
+// Inspection Photo schemas
+export const InspectionPhotoSchema = z.object({
+  id: z.number(),
+  inspection_id: z.number(),
+  photo_url: z.string(),
+  display_order: z.number(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateInspectionPhotoSchema = z.object({
+  inspection_id: z.number(),
+  photo_url: z.string(),
+  display_order: z.number().default(0),
+});
+
+export type InspectionPhoto = z.infer<typeof InspectionPhotoSchema>;
+export type CreateInspectionPhotoInput = z.infer<typeof CreateInspectionPhotoSchema>;

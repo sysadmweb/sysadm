@@ -44,12 +44,14 @@ export default function Inspection() {
         title: "",
         observations: "",
         photo: null as File | null,
+        photos: [] as File[],
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingInspection, setEditingInspection] = useState<Inspection | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -134,23 +136,46 @@ export default function Inspection() {
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        if (editingInspection) {
+            const file = files[0];
             setFormData({ ...formData, photo: file });
-
             const reader = new FileReader();
             reader.onloadend = () => {
                 setPhotoPreview(reader.result as string);
             };
             reader.readAsDataURL(file);
+        } else {
+            const arr = Array.from(files);
+            setFormData({ ...formData, photos: arr });
+            Promise.all(
+                arr.map(
+                    (file) =>
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.readAsDataURL(file);
+                        })
+                )
+            ).then((list) => setPhotoPreviews(list));
         }
+    };
+
+    const removePhotoAt = (idx: number) => {
+        const nextPhotos = formData.photos.slice();
+        nextPhotos.splice(idx, 1);
+        const nextPreviews = photoPreviews.slice();
+        nextPreviews.splice(idx, 1);
+        setFormData({ ...formData, photos: nextPhotos });
+        setPhotoPreviews(nextPreviews);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!editingInspection && !formData.photo) {
-            showToast("Por favor, selecione uma foto.", "error");
+        if (!editingInspection && (!formData.photos || formData.photos.length === 0)) {
+            showToast("Por favor, selecione ao menos uma foto.", "error");
             return;
         }
         if (!formData.title) {
@@ -161,89 +186,121 @@ export default function Inspection() {
         setIsSubmitting(true);
 
         try {
-            let photoUrl = editingInspection?.photo_url || "";
-
-            if (formData.photo) {
-                const options = {
-                    maxSizeMB: 1,
-                    maxWidthOrHeight: 1920,
-                    useWebWorker: true,
-                    fileType: 'image/webp'
-                };
-
-                let compressedFile = formData.photo;
-                try {
-                    compressedFile = await imageCompression(formData.photo, options);
-                } catch (error) {
-                    console.error("Compression error:", error);
-                }
-
-                const fileExt = 'webp';
-                const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                const filePath = `${formData.accommodation_id}/${fileName}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('inspection-photos')
-                    .upload(filePath, compressedFile, {
-                        cacheControl: '3600',
-                        upsert: false,
-                        contentType: 'image/webp'
-                    });
-
-                if (uploadError) {
-                    throw new Error("Falha no upload da imagem");
-                }
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('inspection-photos')
-                    .getPublicUrl(filePath);
-
-                photoUrl = publicUrl;
-            }
-
-            const payload = {
-                accommodation_id: formData.accommodation_id,
-                title: formData.title.toUpperCase(),
-                observations: formData.observations ? formData.observations.toUpperCase() : null,
-                photo_url: photoUrl,
-                inspection_date: editingInspection?.inspection_date || new Date().toISOString(),
-                user_id: currentUser?.id,
-                status: "REALIZADO",
-                is_active: true
+            const options = {
+                maxSizeMB: 0.3,
+                maxWidthOrHeight: 1280,
+                useWebWorker: true,
+                fileType: 'image/webp',
+                initialQuality: 0.6 as number,
             };
 
             if (editingInspection) {
+                let photoUrl = editingInspection?.photo_url || "";
+                if (formData.photo) {
+                    let compressedFile = formData.photo;
+                    try {
+                        compressedFile = await imageCompression(formData.photo, options);
+                    } catch (error) {
+                        console.error("Compression error:", error);
+                    }
+                    const fileExt = 'webp';
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `${formData.accommodation_id}/${fileName}`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('inspection-photos')
+                        .upload(filePath, compressedFile, {
+                            cacheControl: '3600',
+                            upsert: false,
+                            contentType: 'image/webp'
+                        });
+                    if (uploadError) {
+                        throw new Error("Falha no upload da imagem");
+                    }
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('inspection-photos')
+                        .getPublicUrl(filePath);
+                    photoUrl = publicUrl;
+                }
+                const payload = {
+                    accommodation_id: formData.accommodation_id,
+                    title: formData.title.toUpperCase(),
+                    observations: formData.observations ? formData.observations.toUpperCase() : null,
+                    photo_url: photoUrl,
+                    inspection_date: editingInspection?.inspection_date || new Date().toISOString(),
+                    user_id: currentUser?.id,
+                    status: "REALIZADO",
+                    is_active: true
+                };
                 const { error: dbError } = await supabase
                     .from("inspections")
                     .update(payload)
                     .eq("id", editingInspection.id);
-
                 if (dbError) throw dbError;
-
                 setInspections(prev => prev.map(i =>
                     i.id === editingInspection.id
                         ? { ...i, ...payload, id: editingInspection.id, created_at: i.created_at, updated_at: new Date().toISOString() }
                         : i
                 ));
-
                 showToast("Vistoria atualizada com sucesso!", "success");
             } else {
+                const common = {
+                    accommodation_id: formData.accommodation_id,
+                    title: formData.title.toUpperCase(),
+                    observations: formData.observations ? formData.observations.toUpperCase() : null,
+                    inspection_date: new Date().toISOString(),
+                    user_id: currentUser?.id,
+                    status: "REALIZADO",
+                    is_active: true
+                };
+                const payloads: {
+                    accommodation_id: number;
+                    title: string;
+                    observations: string | null;
+                    photo_url: string;
+                    inspection_date: string;
+                    user_id?: number;
+                    status: string;
+                    is_active: boolean;
+                }[] = [];
+                for (const file of formData.photos) {
+                    let compressedFile = file;
+                    try {
+                        compressedFile = await imageCompression(file, options);
+                    } catch (error) {
+                        console.error("Compression error:", error);
+                    }
+                    const fileExt = 'webp';
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `${formData.accommodation_id}/${fileName}`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('inspection-photos')
+                        .upload(filePath, compressedFile, {
+                            cacheControl: '3600',
+                            upsert: false,
+                            contentType: 'image/webp'
+                        });
+                    if (uploadError) {
+                        throw new Error("Falha no upload da imagem");
+                    }
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('inspection-photos')
+                        .getPublicUrl(filePath);
+                    payloads.push({ ...common, photo_url: publicUrl });
+                }
                 const { data: insertedData, error: dbError } = await supabase
                     .from("inspections")
-                    .insert(payload)
-                    .select()
-                    .single();
-
+                    .insert(payloads)
+                    .select();
                 if (dbError) throw dbError;
-
-                if (insertedData) {
-                    setInspections(prev => [insertedData as Inspection, ...prev]);
-
+                if (insertedData && Array.isArray(insertedData)) {
+                    setInspections(prev => [
+                        ...(insertedData as Inspection[]),
+                        ...prev
+                    ]);
                     if (!inspectedAccommodationIds.includes(formData.accommodation_id)) {
                         setInspectedAccommodationIds(prev => [...prev, formData.accommodation_id]);
                     }
                 }
-
                 setSelectedAccommodationId(formData.accommodation_id);
                 showToast("Vistoria salva com sucesso!", "success");
             }
@@ -265,8 +322,10 @@ export default function Inspection() {
             title: "",
             observations: "",
             photo: null,
+            photos: [],
         });
         setPhotoPreview(null);
+        setPhotoPreviews([]);
         setEditingInspection(null);
     };
 
@@ -278,6 +337,7 @@ export default function Inspection() {
             title: "",
             observations: "",
             photo: null,
+            photos: [],
         });
         setShowModal(true);
     };
@@ -285,11 +345,13 @@ export default function Inspection() {
     const openEditModal = (inspection: Inspection) => {
         setEditingInspection(inspection);
         setPhotoPreview(inspection.photo_url || null);
+        setPhotoPreviews(inspection.photo_url ? [inspection.photo_url] : []);
         setFormData({
             accommodation_id: inspection.accommodation_id,
             title: inspection.title || "",
             observations: inspection.observations || "",
             photo: null,
+            photos: [],
         });
         setShowModal(true);
     };
@@ -558,42 +620,81 @@ export default function Inspection() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                                    Foto {editingInspection && "(Deixe em branco para manter a atual)"}
+                                    {editingInspection ? "Foto" : "Fotos"} {editingInspection && "(Deixe em branco para manter a atual)"}
                                 </label>
-                                {photoPreview && (
-                                    <div className="mb-3 relative">
-                                        <img
-                                            src={photoPreview}
-                                            alt="Preview"
-                                            className="w-full h-48 object-cover rounded-lg border border-slate-700"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPhotoPreview(editingInspection?.photo_url || null);
-                                                setFormData({ ...formData, photo: null });
-                                            }}
-                                            className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                                {editingInspection ? (
+                                    <>
+                                        {photoPreview && (
+                                            <div className="mb-3 relative">
+                                                <img
+                                                    src={photoPreview}
+                                                    alt="Preview"
+                                                    className="w-full h-48 object-cover rounded-lg border border-slate-700"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setPhotoPreview(editingInspection?.photo_url || null);
+                                                        setFormData({ ...formData, photo: null });
+                                                    }}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleFileChange}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                required={!editingInspection && !photoPreview}
+                                            />
+                                            <div className="flex flex-col items-center gap-2 text-slate-400">
+                                                <ImageIcon className="w-8 h-8" />
+                                                <span className="text-sm">
+                                                    {formData.photo ? formData.photo.name : "Clique para selecionar uma foto"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {photoPreviews.length > 0 && (
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                                                {photoPreviews.map((src, idx) => (
+                                                    <div key={idx} className="relative">
+                                                        <img src={src} alt={`Preview ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border border-slate-700" />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removePhotoAt(idx)}
+                                                            className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                onChange={handleFileChange}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                required={!editingInspection && photoPreviews.length === 0}
+                                            />
+                                            <div className="flex flex-col items-center gap-2 text-slate-400">
+                                                <ImageIcon className="w-8 h-8" />
+                                                <span className="text-sm">
+                                                    {formData.photos.length > 0 ? `${formData.photos.length} arquivo(s) selecionado(s)` : "Clique para selecionar uma ou mais fotos"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </>
                                 )}
-                                <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleFileChange}
-                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                        required={!editingInspection && !photoPreview}
-                                    />
-                                    <div className="flex flex-col items-center gap-2 text-slate-400">
-                                        <ImageIcon className="w-8 h-8" />
-                                        <span className="text-sm">
-                                            {formData.photo ? formData.photo.name : "Clique para selecionar uma foto"}
-                                        </span>
-                                    </div>
-                                </div>
                             </div>
 
                             <div>
