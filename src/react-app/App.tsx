@@ -13,6 +13,7 @@ import EmployeesPage from "@/react-app/pages/Employees";
 import InspectionPage from "@/react-app/pages/Inspection";
 import PurchasesXmlPage from "@/react-app/pages/PurchasesXml";
 import PurchasesViewPage from "@/react-app/pages/PurchasesView";
+import WorkLogsPage from "@/react-app/pages/WorkLogs";
 import Layout from "@/react-app/components/Layout";
 import ProtectedRoute from "@/react-app/components/ProtectedRoute";
 
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="purchases/xml" element={<PurchasesXmlPage />} />
             <Route path="purchases/view" element={<PurchasesViewPage />} />
             <Route path="permissions" element={<PermissionsPage />} />
+            <Route path="jornada" element={<WorkLogsPage />} />
           </Route>
         </Routes>
       </Router>

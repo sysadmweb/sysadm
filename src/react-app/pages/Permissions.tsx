@@ -41,6 +41,7 @@ export default function Permissions() {
       "users",
       "permissions",
       "purchases",
+      "jornada",
     ],
     []
   );
@@ -55,6 +56,7 @@ export default function Permissions() {
     users: "Usuários",
     permissions: "Regras",
     purchases: "Compras",
+    jornada: "Jornada",
   };
 
   useEffect(() => {

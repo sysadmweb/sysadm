@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Clock,
 } from "lucide-react";
 
 export default function Layout() {
@@ -49,6 +50,7 @@ export default function Layout() {
     // { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
     { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
     { path: "/inspection", icon: ClipboardCheck, label: "Vistorias", key: "inspection" },
+    { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
     {
       path: "/purchases",
       icon: ShoppingCart,
