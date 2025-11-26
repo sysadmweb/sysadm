@@ -43,15 +43,16 @@ export default function Inspection() {
         accommodation_id: 0,
         title: "",
         observations: "",
-        photo: null as File | null,
         photos: [] as File[],
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingInspection, setEditingInspection] = useState<Inspection | null>(null);
-    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+    const [inspectionPhotos, setInspectionPhotos] = useState<Record<number, string[]>>({});
+    const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
+    const [removedExistingUrls, setRemovedExistingUrls] = useState<string[]>([]);
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -108,14 +109,35 @@ export default function Inspection() {
                 .order("created_at", { ascending: false });
 
             if (!error && Array.isArray(data)) {
-                setInspections(data as Inspection[]);
-                const uniqueIds = Array.from(new Set(data.map(i => i.accommodation_id)));
+                const list = data as Inspection[];
+                setInspections(list);
+                const uniqueIds = Array.from(new Set(list.map(i => i.accommodation_id)));
                 setInspectedAccommodationIds(uniqueIds);
+                const inspIds = list.map(i => i.id);
+                if (inspIds.length > 0) {
+                    const { data: photosRows } = await supabase
+                        .from("inspection_photos")
+                        .select("inspection_id, photo_url, is_active")
+                        .in("inspection_id", inspIds)
+                        .eq("is_active", true);
+                    const map: Record<number, string[]> = {};
+                    (photosRows || []).forEach((row: { inspection_id: number; photo_url: string }) => {
+                        const id = row.inspection_id;
+                        const url = row.photo_url;
+                        if (!map[id]) map[id] = [];
+                        map[id].push(url);
+                    });
+                    setInspectionPhotos(map);
+                } else {
+                    setInspectionPhotos({});
+                }
             }
         } catch (error) {
             console.error("Error fetching inspections:", error);
         }
     };
+
+    //
 
     const fetchUsers = async () => {
         try {
@@ -138,29 +160,19 @@ export default function Inspection() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
-        if (editingInspection) {
-            const file = files[0];
-            setFormData({ ...formData, photo: file });
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPhotoPreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            const arr = Array.from(files);
-            const nextPhotos = [...formData.photos, ...arr];
-            setFormData({ ...formData, photos: nextPhotos });
-            Promise.all(
-                arr.map(
-                    (file) =>
-                        new Promise<string>((resolve) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.readAsDataURL(file);
-                        })
-                )
-            ).then((list) => setPhotoPreviews((prev) => [...prev, ...list]));
-        }
+        const arr = Array.from(files);
+        const nextPhotos = [...formData.photos, ...arr];
+        setFormData({ ...formData, photos: nextPhotos });
+        Promise.all(
+            arr.map(
+                (file) =>
+                    new Promise<string>((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.readAsDataURL(file);
+                    })
+            )
+        ).then((list) => setPhotoPreviews((prev) => [...prev, ...list]));
     };
 
     const removePhotoAt = (idx: number) => {
@@ -170,6 +182,11 @@ export default function Inspection() {
         nextPreviews.splice(idx, 1);
         setFormData({ ...formData, photos: nextPhotos });
         setPhotoPreviews(nextPreviews);
+    };
+
+    const removeExistingUrl = (url: string) => {
+        setExistingPhotoUrls((prev) => prev.filter((u) => u !== url));
+        setRemovedExistingUrls((prev) => [...prev, url]);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -196,37 +213,10 @@ export default function Inspection() {
             };
 
             if (editingInspection) {
-                let photoUrl = editingInspection?.photo_url || "";
-                if (formData.photo) {
-                    let compressedFile = formData.photo;
-                    try {
-                        compressedFile = await imageCompression(formData.photo, options);
-                    } catch (error) {
-                        console.error("Compression error:", error);
-                    }
-                    const fileExt = 'webp';
-                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                    const filePath = `${formData.accommodation_id}/${fileName}`;
-                    const { error: uploadError } = await supabase.storage
-                        .from('inspection-photos')
-                        .upload(filePath, compressedFile, {
-                            cacheControl: '3600',
-                            upsert: false,
-                            contentType: 'image/webp'
-                        });
-                    if (uploadError) {
-                        throw new Error("Falha no upload da imagem");
-                    }
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('inspection-photos')
-                        .getPublicUrl(filePath);
-                    photoUrl = publicUrl;
-                }
                 const payload = {
                     accommodation_id: formData.accommodation_id,
                     title: formData.title.toUpperCase(),
                     observations: formData.observations ? formData.observations.toUpperCase() : null,
-                    photo_url: photoUrl,
                     inspection_date: editingInspection?.inspection_date || new Date().toISOString(),
                     user_id: currentUser?.id,
                     status: "REALIZADO",
@@ -237,6 +227,53 @@ export default function Inspection() {
                     .update(payload)
                     .eq("id", editingInspection.id);
                 if (dbError) throw dbError;
+
+                if (removedExistingUrls.length > 0) {
+                    await supabase
+                        .from('inspection_photos')
+                        .update({ is_active: false })
+                        .eq('inspection_id', editingInspection.id)
+                        .in('photo_url', removedExistingUrls);
+                }
+
+                const uploadedUrls: string[] = [];
+                if (formData.photos.length > 0) {
+                    for (const file of formData.photos) {
+                        let compressedFile = file;
+                        try {
+                            compressedFile = await imageCompression(file, options);
+                        } catch (error) {
+                            console.error("Compression error:", error);
+                        }
+                        const fileExt = 'webp';
+                        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                        const filePath = `${formData.accommodation_id}/${fileName}`;
+                        const { error: uploadError } = await supabase.storage
+                            .from('inspection-photos')
+                            .upload(filePath, compressedFile, {
+                                cacheControl: '3600',
+                                upsert: false,
+                                contentType: 'image/webp'
+                            });
+                        if (uploadError) {
+                            throw new Error("Falha no upload da imagem");
+                        }
+                        const { data: { publicUrl } } = supabase.storage
+                            .from('inspection-photos')
+                            .getPublicUrl(filePath);
+                        uploadedUrls.push(publicUrl);
+                        await supabase
+                            .from('inspection_photos')
+                            .insert({ inspection_id: editingInspection.id, photo_url: publicUrl, is_active: true });
+                    }
+                }
+
+                const finalUrls = [...existingPhotoUrls, ...uploadedUrls];
+                setInspectionPhotos(prev => ({
+                    ...prev,
+                    [editingInspection.id]: finalUrls
+                }));
+
                 setInspections(prev => prev.map(i =>
                     i.id === editingInspection.id
                         ? { ...i, ...payload, id: editingInspection.id, created_at: i.created_at, updated_at: new Date().toISOString() }
@@ -244,7 +281,7 @@ export default function Inspection() {
                 ));
                 showToast("Vistoria atualizada com sucesso!", "success");
             } else {
-                const common = {
+                const payload = {
                     accommodation_id: formData.accommodation_id,
                     title: formData.title.toUpperCase(),
                     observations: formData.observations ? formData.observations.toUpperCase() : null,
@@ -253,16 +290,15 @@ export default function Inspection() {
                     status: "REALIZADO",
                     is_active: true
                 };
-                const payloads: {
-                    accommodation_id: number;
-                    title: string;
-                    observations: string | null;
-                    photo_url: string;
-                    inspection_date: string;
-                    user_id?: number;
-                    status: string;
-                    is_active: boolean;
-                }[] = [];
+                const { data: inserted, error: dbError } = await supabase
+                    .from("inspections")
+                    .insert(payload)
+                    .select()
+                    .single();
+                if (dbError) throw dbError;
+                const newInspection = inserted as Inspection;
+
+                const uploadedUrls: string[] = [];
                 for (const file of formData.photos) {
                     let compressedFile = file;
                     try {
@@ -286,21 +322,17 @@ export default function Inspection() {
                     const { data: { publicUrl } } = supabase.storage
                         .from('inspection-photos')
                         .getPublicUrl(filePath);
-                    payloads.push({ ...common, photo_url: publicUrl });
+                    uploadedUrls.push(publicUrl);
+                    await supabase
+                        .from('inspection_photos')
+                        .insert({ inspection_id: newInspection.id, photo_url: publicUrl, is_active: true });
                 }
-                const { data: insertedData, error: dbError } = await supabase
-                    .from("inspections")
-                    .insert(payloads)
-                    .select();
-                if (dbError) throw dbError;
-                if (insertedData && Array.isArray(insertedData)) {
-                    setInspections(prev => [
-                        ...(insertedData as Inspection[]),
-                        ...prev
-                    ]);
-                    if (!inspectedAccommodationIds.includes(formData.accommodation_id)) {
-                        setInspectedAccommodationIds(prev => [...prev, formData.accommodation_id]);
-                    }
+
+                setInspectionPhotos(prev => ({ ...prev, [newInspection.id]: uploadedUrls }));
+                setInspections(prev => [newInspection, ...prev]);
+
+                if (!inspectedAccommodationIds.includes(formData.accommodation_id)) {
+                    setInspectedAccommodationIds(prev => [...prev, formData.accommodation_id]);
                 }
                 setSelectedAccommodationId(formData.accommodation_id);
                 showToast("Vistoria salva com sucesso!", "success");
@@ -322,22 +354,20 @@ export default function Inspection() {
             accommodation_id: accommodations[0]?.id || 0,
             title: "",
             observations: "",
-            photo: null,
             photos: [],
         });
-        setPhotoPreview(null);
         setPhotoPreviews([]);
         setEditingInspection(null);
+        setExistingPhotoUrls([]);
+        setRemovedExistingUrls([]);
     };
 
     const openNewInspectionModal = () => {
         setEditingInspection(null);
-        setPhotoPreview(null);
         setFormData({
             accommodation_id: selectedAccommodationId || accommodations[0]?.id || 0,
             title: "",
             observations: "",
-            photo: null,
             photos: [],
         });
         setShowModal(true);
@@ -345,13 +375,14 @@ export default function Inspection() {
 
     const openEditModal = (inspection: Inspection) => {
         setEditingInspection(inspection);
-        setPhotoPreview(inspection.photo_url || null);
-        setPhotoPreviews(inspection.photo_url ? [inspection.photo_url] : []);
+        const existing = inspectionPhotos[inspection.id] || [];
+        setExistingPhotoUrls(existing);
+        setRemovedExistingUrls([]);
+        setPhotoPreviews([]);
         setFormData({
             accommodation_id: inspection.accommodation_id,
             title: inspection.title || "",
             observations: inspection.observations || "",
-            photo: null,
             photos: [],
         });
         setShowModal(true);
@@ -510,46 +541,45 @@ export default function Inspection() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {selectedInspections.map((inspection) => (
-                                    <div key={inspection.id} className="bg-slate-800 rounded-lg overflow-hidden border border-slate-700 shadow-lg hover:shadow-xl transition-shadow group">
-                                        <div className="aspect-video bg-slate-900 relative overflow-hidden">
-                                            {inspection.photo_url ? (
-                                                <img
-                                                    src={inspection.photo_url}
-                                                    alt={inspection.title || "Vistoria"}
-                                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-slate-600">
-                                                    <ImageIcon className="w-8 h-8" />
-                                                </div>
-                                            )}
-                                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8">
-                                                <p className="text-white font-medium truncate">{inspection.title}</p>
-                                            </div>
-                                            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={() => openEditModal(inspection)}
-                                                    className="p-2 bg-blue-500/80 hover:bg-blue-600 text-white rounded-lg"
-                                                    title="Editar"
-                                                >
-                                                    <Edit className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteInspection(inspection.id)}
-                                                    className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-lg"
-                                                    title="Excluir foto"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
+                                    <div key={inspection.id} className="bg-slate-800 rounded-lg overflow-hidden border border-slate-700 shadow-lg hover:shadow-xl transition-shadow">
                                         <div className="p-3">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-slate-200 font-medium truncate">{inspection.title}</p>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => openEditModal(inspection)}
+                                                        className="p-2 bg-blue-500/80 hover:bg-blue-600 text-white rounded-lg"
+                                                        title="Editar"
+                                                    >
+                                                        <Edit className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteInspection(inspection.id)}
+                                                        className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-lg"
+                                                        title="Excluir vistoria"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {(inspectionPhotos[inspection.id] || []).map((url, idx) => (
+                                                    <img key={idx} src={url} alt={`Foto ${idx + 1}`} className="w-full h-24 object-cover rounded border border-slate-700" />
+                                                ))}
+                                                {(!inspectionPhotos[inspection.id] || inspectionPhotos[inspection.id].length === 0) && (
+                                                    <div className="col-span-3 w-full h-24 flex items-center justify-center text-slate-600 border border-dashed border-slate-700 rounded">
+                                                        <ImageIcon className="w-6 h-6" />
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             {inspection.observations && (
-                                                <p className="text-slate-400 text-sm mb-3 line-clamp-2">
+                                                <p className="text-slate-400 text-sm mt-3 line-clamp-2">
                                                     {inspection.observations}
                                                 </p>
                                             )}
-                                            <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-700">
+                                            <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-700 mt-3">
                                                 <span>{new Date(inspection.created_at).toLocaleDateString('pt-BR')}</span>
                                                 <span>{inspection.user_id && users[inspection.user_id] ? users[inspection.user_id].split(' ')[0] : 'Sistema'}</span>
                                             </div>
@@ -621,82 +651,57 @@ export default function Inspection() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                                    {editingInspection ? "Foto" : "Fotos"} {editingInspection && "(Deixe em branco para manter a atual)"}
+                                    Fotos
                                 </label>
-                                {editingInspection ? (
-                                    <>
-                                        {photoPreview && (
-                                            <div className="mb-3 relative">
-                                                <img
-                                                    src={photoPreview}
-                                                    alt="Preview"
-                                                    className="w-full h-48 object-cover rounded-lg border border-slate-700"
-                                                />
+                                {editingInspection && existingPhotoUrls.length > 0 && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                                        {existingPhotoUrls.map((src, idx) => (
+                                            <div key={`existing-${idx}`} className="relative">
+                                                <img src={src} alt={`Atual ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border border-slate-700" />
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        setPhotoPreview(editingInspection?.photo_url || null);
-                                                        setFormData({ ...formData, photo: null });
-                                                    }}
+                                                    onClick={() => removeExistingUrl(src)}
                                                     className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
                                                 >
                                                     <X className="w-4 h-4" />
                                                 </button>
                                             </div>
-                                        )}
-                                        <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleFileChange}
-                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                required={!editingInspection && !photoPreview}
-                                            />
-                                            <div className="flex flex-col items-center gap-2 text-slate-400">
-                                                <ImageIcon className="w-8 h-8" />
-                                                <span className="text-sm">
-                                                    {formData.photo ? formData.photo.name : "Clique para selecionar uma foto"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        {photoPreviews.length > 0 && (
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-                                                {photoPreviews.map((src, idx) => (
-                                                    <div key={idx} className="relative">
-                                                        <img src={src} alt={`Preview ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border border-slate-700" />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removePhotoAt(idx)}
-                                                            className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
-                                                        >
-                                                            <X className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                multiple
-                                                capture="environment"
-                                                onChange={handleFileChange}
-                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                required={!editingInspection && photoPreviews.length === 0}
-                                            />
-                                            <div className="flex flex-col items-center gap-2 text-slate-400">
-                                                <ImageIcon className="w-8 h-8" />
-                                                <span className="text-sm">
-                                                    {formData.photos.length > 0 ? `${formData.photos.length} arquivo(s) selecionado(s)` : "Clique para selecionar uma ou mais fotos"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </>
+                                        ))}
+                                    </div>
                                 )}
+                                {photoPreviews.length > 0 && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                                        {photoPreviews.map((src, idx) => (
+                                            <div key={`new-${idx}`} className="relative">
+                                                <img src={src} alt={`Nova ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border border-slate-700" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePhotoAt(idx)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500/80 hover:bg-red-600 text-white rounded"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:bg-slate-800/50 transition-colors cursor-pointer relative">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        capture="environment"
+                                        onChange={handleFileChange}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        required={!editingInspection && photoPreviews.length === 0}
+                                    />
+                                    <div className="flex flex-col items-center gap-2 text-slate-400">
+                                        <ImageIcon className="w-8 h-8" />
+                                        <span className="text-sm">
+                                            {formData.photos.length > 0 ? `${formData.photos.length} arquivo(s) selecionado(s)` : "Clique para selecionar uma ou mais fotos"}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
