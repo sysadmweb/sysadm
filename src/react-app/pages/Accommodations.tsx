@@ -12,10 +12,14 @@ export default function Accommodations() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    unit_id: number;
+    bed_count: number | string;
+  }>({
     name: "",
     unit_id: 0,
-    bed_count: 0,
+    bed_count: "",
   });
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
@@ -109,7 +113,7 @@ export default function Accommodations() {
     e.preventDefault();
 
     try {
-      const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id, bed_count: formData.bed_count };
+      const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id, bed_count: Number(formData.bed_count) || 0 };
       if (editingAccommodation) {
         const { error } = await supabase
           .from("accommodations")
@@ -133,7 +137,7 @@ export default function Accommodations() {
 
       setShowModal(false);
       setEditingAccommodation(null);
-      setFormData({ name: "", unit_id: 0, bed_count: 0 });
+      setFormData({ name: "", unit_id: 0, bed_count: "" });
       fetchAccommodations();
     } catch (error) {
       console.error("Error saving accommodation:", error);
@@ -197,7 +201,7 @@ export default function Accommodations() {
         <button
           onClick={() => {
             setEditingAccommodation(null);
-            setFormData({ name: "", unit_id: units[0]?.id || 0, bed_count: 0 });
+            setFormData({ name: "", unit_id: units[0]?.id || 0, bed_count: "" });
             setShowModal(true);
           }}
           className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
@@ -274,7 +278,7 @@ export default function Accommodations() {
                     {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
                   </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    {accommodation.bed_count || 0} camas
+                    {accommodation.bed_count} camas
                   </p>
                 </div>
               </div>
@@ -350,10 +354,10 @@ export default function Accommodations() {
                 </label>
                 <input
                   type="number"
-                  min="0"
                   value={formData.bed_count}
-                  onChange={(e) => setFormData({ ...formData, bed_count: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData({ ...formData, bed_count: e.target.value === "" ? "" : parseInt(e.target.value) })}
                   className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  placeholder="0"
                   required
                 />
               </div>

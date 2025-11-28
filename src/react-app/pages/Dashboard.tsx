@@ -52,7 +52,7 @@ export default function Dashboard() {
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
-      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }, { data: invoices }] = await Promise.all([
+      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }, { data: invoices }, { data: manualPurchases }] = await Promise.all([
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
@@ -60,11 +60,14 @@ export default function Dashboard() {
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? supabase.from("units").select("id, name") : supabase.from("units").select("id, name").in("id", unitIds),
         supabase.from("invoices").select("total_value"),
+        supabase.from("manual_purchases").select("total_value").eq("is_active", true),
       ]);
       const activeAccommodations = Array.isArray(accRows) ? accRows.length : 0;
 
-      const calculatedTotalCost = invoices?.reduce((sum, inv) => sum + (inv.total_value || 0), 0) || 0;
-      setTotalCost(calculatedTotalCost);
+      const invoicesTotal = invoices?.reduce((sum, inv) => sum + (inv.total_value || 0), 0) || 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const manualTotal = (manualPurchases as any[])?.reduce((sum, mp) => sum + (mp.total_value || 0), 0) || 0;
+      setTotalCost(invoicesTotal + manualTotal);
 
       const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
       const { data: accommodationsWithBeds } = await supabase

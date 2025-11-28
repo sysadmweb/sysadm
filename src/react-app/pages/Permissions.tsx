@@ -41,6 +41,8 @@ export default function Permissions() {
       "users",
       "permissions",
       "purchases",
+      "manual_purchases",
+      "categories",
       "jornada",
     ],
     []
@@ -56,6 +58,8 @@ export default function Permissions() {
     users: "Usuários",
     permissions: "Regras",
     purchases: "Compras",
+    manual_purchases: "Lançamento Avulso",
+    categories: "Categorias",
     jornada: "Jornada",
   };
 

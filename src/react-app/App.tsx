@@ -14,40 +14,44 @@ import InspectionPage from "@/react-app/pages/Inspection";
 import PurchasesXmlPage from "@/react-app/pages/PurchasesXml";
 import PurchasesViewPage from "@/react-app/pages/PurchasesView";
 import WorkLogsPage from "@/react-app/pages/WorkLogs";
+import CategoriesPage from "@/react-app/pages/Categories";
+import ManualPurchasesPage from "@/react-app/pages/ManualPurchases";
 import Layout from "@/react-app/components/Layout";
 import ProtectedRoute from "@/react-app/components/ProtectedRoute";
 
 export default function App() {
-  return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="users" element={<UsersPage />} />
-            <Route path="users/new" element={<RegisterUserPage />} />
-            <Route path="units" element={<UnitsPage />} />
-            <Route path="functions" element={<FunctionsPage />} />
-            <Route path="accommodations" element={<AccommodationsPage />} />
-            <Route path="rooms" element={<RoomsPage />} />
-            <Route path="employees" element={<EmployeesPage />} />
-            <Route path="inspection" element={<InspectionPage />} />
-            <Route path="purchases/xml" element={<PurchasesXmlPage />} />
-            <Route path="purchases/view" element={<PurchasesViewPage />} />
-            <Route path="permissions" element={<PermissionsPage />} />
-            <Route path="jornada" element={<WorkLogsPage />} />
-          </Route>
-        </Routes>
-      </Router>
-    </AuthProvider>
-  );
+    return (
+        <AuthProvider>
+            <Router>
+                <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route
+                        path="/"
+                        element={
+                            <ProtectedRoute>
+                                <Layout />
+                            </ProtectedRoute>
+                        }
+                    >
+                        <Route index element={<Navigate to="/dashboard" replace />} />
+                        <Route path="dashboard" element={<DashboardPage />} />
+                        <Route path="users" element={<UsersPage />} />
+                        <Route path="users/new" element={<RegisterUserPage />} />
+                        <Route path="units" element={<UnitsPage />} />
+                        <Route path="functions" element={<FunctionsPage />} />
+                        <Route path="accommodations" element={<AccommodationsPage />} />
+                        <Route path="rooms" element={<RoomsPage />} />
+                        <Route path="employees" element={<EmployeesPage />} />
+                        <Route path="inspection" element={<InspectionPage />} />
+                        <Route path="purchases/xml" element={<PurchasesXmlPage />} />
+                        <Route path="purchases/view" element={<PurchasesViewPage />} />
+                        <Route path="purchases/manual" element={<ManualPurchasesPage />} />
+                        <Route path="permissions" element={<PermissionsPage />} />
+                        <Route path="categories" element={<CategoriesPage />} />
+                        <Route path="jornada" element={<WorkLogsPage />} />
+                    </Route>
+                </Routes>
+            </Router>
+        </AuthProvider>
+    );
 }
