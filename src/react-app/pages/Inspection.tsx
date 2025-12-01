@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Loader2, ClipboardCheck, Home, Image as ImageIcon, X, Trash2, Edit } from "lucide-react";
+import { Plus, Loader2, ClipboardCheck, Home, Image as ImageIcon, X, Trash2, Edit, Download } from "lucide-react";
 import imageCompression from 'browser-image-compression';
 
 type Inspection = {
@@ -53,6 +53,7 @@ export default function Inspection() {
     const [inspectionPhotos, setInspectionPhotos] = useState<Record<number, string[]>>({});
     const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
     const [removedExistingUrls, setRemovedExistingUrls] = useState<string[]>([]);
+    const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -187,6 +188,24 @@ export default function Inspection() {
     const removeExistingUrl = (url: string) => {
         setExistingPhotoUrls((prev) => prev.filter((u) => u !== url));
         setRemovedExistingUrls((prev) => [...prev, url]);
+    };
+
+    const handleDownload = async (url: string) => {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `vistoria-${Date.now()}.webp`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error('Download failed:', error);
+            window.open(url, '_blank');
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -565,7 +584,13 @@ export default function Inspection() {
 
                                             <div className="grid grid-cols-3 gap-2">
                                                 {(inspectionPhotos[inspection.id] || []).map((url, idx) => (
-                                                    <img key={idx} src={url} alt={`Foto ${idx + 1}`} className="w-full h-24 object-cover rounded border border-slate-700" />
+                                                    <img
+                                                        key={idx}
+                                                        src={url}
+                                                        alt={`Foto ${idx + 1}`}
+                                                        className="w-full h-24 object-cover rounded border border-slate-700 cursor-pointer hover:opacity-80 transition-opacity"
+                                                        onClick={() => setZoomedImage(url)}
+                                                    />
                                                 ))}
                                                 {(!inspectionPhotos[inspection.id] || inspectionPhotos[inspection.id].length === 0) && (
                                                     <div className="col-span-3 w-full h-24 flex items-center justify-center text-slate-600 border border-dashed border-slate-700 rounded">
@@ -780,6 +805,33 @@ export default function Inspection() {
                                 Excluir Tudo
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {zoomedImage && (
+                <div className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => setZoomedImage(null)}>
+                    <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                        <div className="absolute top-4 right-4 flex gap-4 z-10">
+                            <button
+                                onClick={() => handleDownload(zoomedImage)}
+                                className="p-2 bg-slate-800/50 hover:bg-slate-700 text-white rounded-full backdrop-blur-md transition-all"
+                                title="Baixar imagem"
+                            >
+                                <Download className="w-6 h-6" />
+                            </button>
+                            <button
+                                onClick={() => setZoomedImage(null)}
+                                className="p-2 bg-slate-800/50 hover:bg-slate-700 text-white rounded-full backdrop-blur-md transition-all"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <img
+                            src={zoomedImage}
+                            alt="Zoom"
+                            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        />
                     </div>
                 </div>
             )}
