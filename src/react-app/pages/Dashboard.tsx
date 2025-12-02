@@ -136,13 +136,15 @@ export default function Dashboard() {
       icon: UserCheck,
       color: "from-green-500 to-emerald-500",
       bgColor: "bg-green-500/10",
+      accentRing: "ring-green-400",
     },
     {
       label: "Vagas Ocupadas",
       value: `${stats?.occupied_beds || 0}/${stats?.total_beds || 0}`,
       icon: TagIcon,
       color: "from-purple-500 to-blue-500",
-      bgColor: "bg-green-500/10",
+      bgColor: "bg-purple-500/10",
+      accentRing: "ring-purple-400",
     },
     {
       label: "Total de Alojamentos",
@@ -150,6 +152,7 @@ export default function Dashboard() {
       icon: Home,
       color: "from-blue-500 to-cyan-500",
       bgColor: "bg-blue-500/10",
+      accentRing: "ring-blue-400",
     },
     {
       label: "Custo Total Obra",
@@ -157,6 +160,7 @@ export default function Dashboard() {
       icon: DollarSign,
       color: "from-yellow-500 to-orange-500",
       bgColor: "bg-yellow-500/10",
+      accentRing: "ring-yellow-400",
     }
   ];
 
@@ -168,20 +172,20 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         {statCards.map((card) => (
           <div
             key={card.label}
-            className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
+            className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 md:p-6 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg ${card.bgColor}`}>
-                <card.icon className={`w-6 h-6 bg-gradient-to-r ${card.color} `} />
+            <div className="flex items-center gap-3 mb-2">
+              <div className={`rounded-full p-2 bg-slate-800 border border-slate-700 ring-2 ring-offset-2 ring-offset-slate-900 ${card.accentRing}`}>
+                <card.icon className="w-5 h-5 text-slate-100" />
               </div>
             </div>
-            <div>
-              <p className="text-3xl font-bold text-slate-100 mb-1">{card.value}</p>
-              <p className="text-sm text-slate-400">{card.label}</p>
+            <div className="space-y-1">
+              <p className="text-2xl md:text-3xl font-bold text-slate-100">{card.value}</p>
+              <p className="text-xs sm:text-sm text-slate-400">{card.label}</p>
             </div>
           </div>
         ))}
