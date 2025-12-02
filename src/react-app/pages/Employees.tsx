@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search, FileDown } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function Employees() {
   const { user: currentUser } = useAuth();
@@ -15,10 +17,9 @@ export default function Employees() {
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortKey, setSortKey] = useState<"registration_number" | "full_name" | "function" | "unit" | "room" | "status">("full_name");
+  const [sortKey, setSortKey] = useState<"full_name" | "function" | "unit" | "room" | "status">("full_name");
   const [sortAsc, setSortAsc] = useState(true);
   const [formData, setFormData] = useState({
-    registration_number: "",
     full_name: "",
     arrival_date: "",
     departure_date: "",
@@ -58,7 +59,7 @@ export default function Employees() {
       const base = supabase
         .from("employees")
         .select(
-          "id, registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
+          "id, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
         ;
@@ -179,7 +180,6 @@ export default function Employees() {
 
     try {
       const payload = {
-        registration_number: formData.registration_number.toUpperCase(),
         full_name: formData.full_name.toUpperCase(),
         arrival_date: formData.arrival_date || null,
         departure_date: formData.departure_date || null,
@@ -194,7 +194,6 @@ export default function Employees() {
         const { error } = await supabase
           .from("employees")
           .update({
-            registration_number: payload.registration_number,
             full_name: payload.full_name,
             arrival_date: payload.arrival_date,
             departure_date: payload.departure_date,
@@ -215,7 +214,6 @@ export default function Employees() {
         const { error } = await supabase
           .from("employees")
           .insert({
-            registration_number: payload.registration_number,
             full_name: payload.full_name,
             arrival_date: payload.arrival_date,
             departure_date: payload.departure_date,
@@ -266,7 +264,6 @@ export default function Employees() {
 
   const resetFormData = () => {
     setFormData({
-      registration_number: "",
       full_name: "",
       arrival_date: "",
       departure_date: "",
@@ -282,7 +279,6 @@ export default function Employees() {
   const openEditModal = (employee: Employee) => {
     setEditingEmployee(employee);
     setFormData({
-      registration_number: employee.registration_number,
       full_name: employee.full_name,
       arrival_date: employee.arrival_date || "",
       departure_date: employee.departure_date || "",
@@ -308,10 +304,7 @@ export default function Employees() {
     const compare = (a: Employee, b: Employee) => {
       let va: string | number = "";
       let vb: string | number = "";
-      if (sortKey === "registration_number") {
-        va = a.registration_number || "";
-        vb = b.registration_number || "";
-      } else if (sortKey === "full_name") {
+      if (sortKey === "full_name") {
         va = a.full_name || "";
         vb = b.full_name || "";
       } else if (sortKey === "function") {
@@ -339,6 +332,102 @@ export default function Employees() {
     return filtered.slice().sort(compare);
   })();
 
+  const generatePDF = async () => {
+    const doc = new jsPDF();
+    const logoUrl = "/logo.png";
+
+    // Filter employees: arrival_date filled AND departure_date empty
+    const activeEmployees = employees.filter(e => e.arrival_date && !e.departure_date);
+
+    if (activeEmployees.length === 0) {
+      showToast("Nenhum colaborador ativo para exportar.", "error");
+      return;
+    }
+
+    // Group by unit
+    const groupedEmployees: Record<number, Employee[]> = {};
+    activeEmployees.forEach(emp => {
+      if (!groupedEmployees[emp.unit_id]) {
+        groupedEmployees[emp.unit_id] = [];
+      }
+      groupedEmployees[emp.unit_id].push(emp);
+    });
+
+    const unitIds = Object.keys(groupedEmployees).map(Number);
+
+    // Load logo
+    let logoDataUrl: string | null = null;
+    try {
+      const response = await fetch(logoUrl);
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Error loading logo:", error);
+    }
+
+    unitIds.forEach((unitId, index) => {
+      if (index > 0) {
+        doc.addPage();
+      }
+
+      const unit = units.find(u => u.id === unitId);
+      const unitEmployees = groupedEmployees[unitId].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+      // Header
+      if (logoDataUrl) {
+        doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+      }
+
+      doc.setFontSize(18);
+      doc.text("LISTA DE COLABORADORES", 50, 20);
+
+      doc.setFontSize(11);
+      const startX = 50;
+      let currentY = 30;
+      const lineHeight = 6;
+
+      doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
+      currentY += lineHeight;
+      doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+
+      // Table
+      autoTable(doc, {
+        startY: 50,
+        head: [["CHEGADA À OBRA", "COLABORADOR", "FUNÇÃO"]],
+        body: unitEmployees.map(emp => [
+          emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
+          emp.full_name || "-",
+          functions.find(f => f.id === emp.function_id)?.name || "-"
+        ]),
+        theme: 'grid',
+        styles: {
+          fontSize: 8,
+          halign: 'center',
+          valign: 'middle',
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        columnStyles: {
+          0: { halign: 'center' }, // Chegada
+          1: { halign: 'left' },   // Colaborador
+          2: { halign: 'center' }, // Função
+        },
+      });
+    });
+
+    doc.save("lista_colaboradores.pdf");
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -363,6 +452,13 @@ export default function Employees() {
           <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
         <div className="w-full md:w-auto flex items-center gap-3">
+          <button
+            onClick={generatePDF}
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all border border-slate-700"
+          >
+            <FileDown className="w-5 h-5" />
+            <span className="hidden sm:inline">Exportar</span>
+          </button>
           <button
             onClick={() => {
               setEditingEmployee(null);
@@ -395,14 +491,13 @@ export default function Employees() {
             <thead className="bg-slate-800/50 border-b border-slate-700/50">
               <tr>
                 {[
-                  { key: "registration_number", label: "Matrícula" },
+                  { key: "arrival_date", label: "Data Chegada" },
                   { key: "full_name", label: "Nome" },
                   { key: "function", label: "Função" },
                   { key: "unit", label: "Unidade" },
                   { key: "accommodation", label: "Alojamento" },
-                  { key: "status", label: "Status" },
                 ].map((col) => (
-                  <th key={col.key} className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                  <th key={col.key} className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
                     <button
                       type="button"
                       onClick={() => {
@@ -413,7 +508,7 @@ export default function Employees() {
                           setSortAsc(true);
                         }
                       }}
-                      className="flex items-center gap-1 hover:text-slate-100"
+                      className="flex items-center justify-center gap-1 hover:text-slate-100 w-full"
                     >
                       <span>{col.label}</span>
                       {sortKey === col.key ? (
@@ -426,24 +521,24 @@ export default function Employees() {
                     </button>
                   </th>
                 ))}
-                <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Ações</th>
+                <th className="px-6 py-4 text-center text-sm font-semibold text-slate-300">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
               {displayedEmployees.map((employee) => (
                 <tr key={employee.id} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-slate-400 font-mono text-sm">
-                      {employee.registration_number}
+                      {employee.arrival_date ? new Date(employee.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <UserCircle className="w-5 h-5 text-blue-400" />
                       <span className="text-slate-200 font-medium">{employee.full_name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-300">
+                  <td className="px-6 py-4 text-slate-300 whitespace-nowrap">
                     {functions.find((f) => f.id === employee.function_id)?.name || "-"}
                   </td>
                   <td className="px-6 py-4 text-slate-300">
@@ -452,9 +547,8 @@ export default function Employees() {
                   <td className="px-6 py-4 text-slate-300">
                     {accommodations.find((a) => a.id === employee.accommodation_id)?.name || "-"}
                   </td>
-                  <td className="px-6 py-4 text-slate-300">{employee.status || "-"}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => openEditModal(employee)}
                         className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
@@ -487,7 +581,9 @@ export default function Employees() {
                 </div>
                 <div>
                   <h3 className="text-slate-200 font-medium text-sm">{employee.full_name}</h3>
-                  <p className="text-slate-400 text-xs font-mono">{employee.registration_number}</p>
+                  <p className="text-slate-400 text-xs font-mono">
+                    {employee.arrival_date ? new Date(employee.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-1">
@@ -542,21 +638,7 @@ export default function Employees() {
               {editingEmployee ? "Editar Funcionário" : "Novo Funcionário"}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Matrícula
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.registration_number}
-                    onChange={(e) =>
-                      setFormData({ ...formData, registration_number: e.target.value.toUpperCase() })
-                    }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    required
-                  />
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Nome Completo

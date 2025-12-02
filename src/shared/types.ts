@@ -127,7 +127,6 @@ export const UpdateRoomSchema = z.object({
 // Employee schemas
 export const EmployeeSchema = z.object({
   id: z.number(),
-  registration_number: z.string(),
   full_name: z.string(),
   arrival_date: z.string().nullable(),
   departure_date: z.string().nullable(),
@@ -143,7 +142,6 @@ export const EmployeeSchema = z.object({
 });
 
 export const CreateEmployeeSchema = z.object({
-  registration_number: z.string().min(1),
   full_name: z.string().min(1),
   arrival_date: z.string().nullable(),
   departure_date: z.string().nullable(),
@@ -156,7 +154,6 @@ export const CreateEmployeeSchema = z.object({
 });
 
 export const UpdateEmployeeSchema = z.object({
-  registration_number: z.string().min(1).optional(),
   full_name: z.string().min(1).optional(),
   arrival_date: z.string().nullable().optional(),
   departure_date: z.string().nullable().optional(),

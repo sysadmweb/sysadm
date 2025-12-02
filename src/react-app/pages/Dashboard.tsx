@@ -12,7 +12,7 @@ export default function Dashboard() {
   const { user: currentUser } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [employeesData, setEmployeesData] = useState<{ registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; is_active: boolean }[]>([]);
+  const [employeesData, setEmployeesData] = useState<{ full_name: string; function_id: number | null; unit_id: number | null; is_active: boolean; arrival_date: string | null }[]>([]);
   const [functionsData, setFunctionsData] = useState<{ id: number; name: string }[]>([]);
   const [unitsData, setUnitsData] = useState<{ id: number; name: string }[]>([]);
   const [totalCost, setTotalCost] = useState(0);
@@ -23,7 +23,7 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      type EmployeeLite = { id: number; registration_number: string; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean };
+      type EmployeeLite = { id: number; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean; arrival_date: string | null };
       type FunctionLite = { id: number; name: string };
       type UnitLite = { id: number; name: string };
 
@@ -37,7 +37,7 @@ export default function Dashboard() {
         .eq("is_active", true);
       const employeesQuery = supabase
         .from("employees")
-        .select("id, registration_number, full_name, function_id, unit_id, accommodation_id, is_active");
+        .select("id, full_name, function_id, unit_id, accommodation_id, is_active, arrival_date");
       const accommodationsQuery = supabase
         .from("accommodations")
         .select("id")
@@ -89,7 +89,7 @@ export default function Dashboard() {
         count: employeesList.filter((e) => e.function_id === f.id && e.is_active).length,
       }));
 
-      setEmployeesData(employeesList.map((e) => ({ registration_number: e.registration_number, full_name: e.full_name, function_id: e.function_id, unit_id: e.unit_id, is_active: e.is_active })));
+      setEmployeesData(employeesList.map((e) => ({ full_name: e.full_name, function_id: e.function_id, unit_id: e.unit_id, is_active: e.is_active, arrival_date: e.arrival_date })));
       setFunctionsData(functionsList.map((f) => ({ id: f.id, name: f.name })));
       setUnitsData(Array.isArray(units) ? (units as UnitLite[]).map((u) => ({ id: u.id, name: u.name })) : []);
 
@@ -194,26 +194,90 @@ export default function Dashboard() {
         </h2>
         <div className="flex justify-end mb-4">
           <button
-            onClick={() => {
+            onClick={async () => {
               const doc = new jsPDF();
-              doc.setFontSize(14);
-              doc.text("LISTA DE COLABORADORES", 14, 20);
-              const activeEmployees = employeesData.filter((e) => e.is_active);
+              const logoUrl = "/logo.png";
+              let logoDataUrl: string | null = null;
+              try {
+                const response = await fetch(logoUrl);
+                const blob = await response.blob();
+                logoDataUrl = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+              } catch (error) {
+                console.error("Error loading logo:", error);
+              }
+
+              if (logoDataUrl) {
+                doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+              }
+
+              doc.setFontSize(18);
+              doc.text("Lista de Colaboradores", 50, 20);
+
+              doc.setFontSize(11);
+              const startX = 50;
+              let currentY = 30;
+              const lineHeight = 6;
+
+              // Determine Unit Name for Header
+              let unitName = "Todas / Diversas";
+              if (currentUser?.unit_id) {
+                // If user is bound to a specific unit, try to find its name
+                // We might not have the full unit list if we are a super user viewing all, 
+                // but typically currentUser.unit_id implies a restriction.
+                // Let's try to look it up in unitsData if available, or just leave as generic if complex.
+                // Actually, if the user sees this dashboard, they see data based on their permissions.
+                // If they are restricted to one unit, we can try to show that unit name.
+                const u = unitsData.find(u => u.id === currentUser.unit_id);
+                if (u) unitName = u.name;
+              } else if (unitsData.length === 1) {
+                unitName = unitsData[0].name;
+              }
+
+              doc.text(`Obra: ${unitName}`, startX, currentY);
+              currentY += lineHeight;
+              doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+
+              const activeEmployees = employeesData
+                .filter((e) => e.is_active && e.arrival_date)
+                .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
               const body = activeEmployees.map((e) => [
-                e.registration_number || "-",
+                e.arrival_date ? new Date(e.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
                 e.full_name || "-",
                 functionsData.find((f) => f.id === e.function_id)?.name || "-",
                 unitsData.find((u) => u.id === (e.unit_id ?? -1))?.name || "-",
               ]);
+
               autoTable(doc, {
-                head: [["Matricula", "Nome completo", "Função", "Obra"]],
+                head: [["CHEGADA Á OBRA", "NOME COMPLETO", "FUNÇÃO", "OBRA"]],
                 body,
-                startY: 28,
+                startY: 55,
+                theme: 'grid',
+                styles: {
+                  fontSize: 8,
+                  halign: 'center',
+                  valign: 'middle',
+                  lineColor: [200, 200, 200],
+                  lineWidth: 0.1,
+                },
+                headStyles: {
+                  fillColor: [41, 128, 185],
+                  textColor: 255,
+                  fontStyle: 'bold',
+                  halign: 'center',
+                },
+                columnStyles: {
+                  0: { halign: 'center' },
+                  1: { halign: 'left' },
+                  2: { halign: 'left' },
+                  3: { halign: 'left' },
+                },
               });
-              const dateStr = new Date().toLocaleDateString("pt-BR");
-              const pageHeight = doc.internal.pageSize.getHeight();
-              doc.setFontSize(10);
-              doc.text(`Gerado em ${dateStr}`, 14, pageHeight - 10);
+
               doc.save("lista-colaboradores.pdf");
             }}
             className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all"

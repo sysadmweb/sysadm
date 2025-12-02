@@ -7,7 +7,6 @@ import autoTable from "jspdf-autotable";
 type Employee = {
     id: number;
     full_name: string;
-    registration_number: string;
     unit_id: number;
 };
 
@@ -59,7 +58,7 @@ export default function WorkLogs() {
         setIsLoading(true);
         try {
             const [empRes, logsRes, unitsRes] = await Promise.all([
-                supabase.from("employees").select("id, full_name, registration_number, unit_id").eq("is_active", true).order("full_name"),
+                supabase.from("employees").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
                 supabase.from("work_logs").select("*").order("work_date", { ascending: false }),
                 supabase.from("units").select("id, name").eq("is_active", true)
             ]);
@@ -217,8 +216,6 @@ export default function WorkLogs() {
             let currentY = 30;
             const lineHeight = 6;
 
-            doc.text(`Matrícula: ${employee?.registration_number || "-"}`, startX, currentY);
-            currentY += lineHeight;
             doc.text(`Colaborador: ${employee?.full_name || "Desconhecido"}`, startX, currentY);
             currentY += lineHeight;
             doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
