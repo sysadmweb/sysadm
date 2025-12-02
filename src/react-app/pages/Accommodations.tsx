@@ -228,7 +228,6 @@ export default function Accommodations() {
               doc.setFontSize(11);
               const startX = 50;
               let currentY = 30;
-              const lineHeight = 6;
 
               doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
 
