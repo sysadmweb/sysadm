@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { FileDown, Loader2, Utensils, Clock, Users, Share2, X } from "lucide-react";
+import { FileDown, Loader2, Utensils, Clock, Users, Share2, X, Coffee } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
@@ -130,6 +130,10 @@ export default function Reports() {
         });
 
         return { accommodations, employeeCounts };
+    };
+
+    const fetchCafeDaManhaData = async () => {
+        return await fetchMarmitasData();
     };
 
     // --- PDF Generators ---
@@ -300,6 +304,9 @@ export default function Reports() {
             (employeeCounts[acc.id] || 0).toString(),
         ]);
 
+        const total = accommodations.reduce((sum: number, acc: Accommodation) => sum + (employeeCounts[acc.id] || 0), 0);
+        body.push(["TOTAL", total.toString()]);
+
         autoTable(doc, {
             head: [["ALOJAMENTO", "MARMITAS"]],
             body,
@@ -308,8 +315,70 @@ export default function Reports() {
             styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [200, 200, 200], lineWidth: 0.1 },
             headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center' },
             columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+            didParseCell: (data: any) => {
+                if (data.row.index === body.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
+                }
+            },
         });
         doc.save("relatorio-marmitas.pdf");
+    };
+
+    const generateCafeDaManhaPDF = async (data: any) => {
+        const { accommodations, employeeCounts } = data;
+        if (accommodations.length === 0) {
+            showToast("Nenhum alojamento encontrado.", "error");
+            return;
+        }
+
+        const doc = new jsPDF();
+        const logoUrl = "/logo.png";
+        let logoDataUrl: string | null = null;
+        try {
+            const response = await fetch(logoUrl);
+            const blob = await response.blob();
+            logoDataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+        } catch (error) {
+            console.error("Error loading logo:", error);
+        }
+
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+        doc.setFontSize(18);
+        doc.text("Relatório de Café da Manhã", 50, 20);
+        doc.setFontSize(11);
+        const startX = 50;
+        let currentY = 30;
+        doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+
+        const body = accommodations.map((acc: Accommodation) => [
+            acc.name || "-",
+            (employeeCounts[acc.id] || 0).toString(),
+        ]);
+
+        const total = accommodations.reduce((sum: number, acc: Accommodation) => sum + (employeeCounts[acc.id] || 0), 0);
+        body.push(["TOTAL", total.toString()]);
+
+        autoTable(doc, {
+            head: [["ALOJAMENTO", "CAFÉ DA MANHÃ"]],
+            body,
+            startY: 45,
+            theme: 'grid',
+            styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [200, 200, 200], lineWidth: 0.1 },
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center' },
+            columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+            didParseCell: (data: any) => {
+                if (data.row.index === body.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
+                }
+            },
+        });
+        doc.save("relatorio-cafe-da-manha.pdf");
     };
 
     // --- Handlers ---
@@ -328,6 +397,9 @@ export default function Reports() {
             } else if (selectedReport === "marmitas") {
                 data = await fetchMarmitasData();
                 await generateMarmitasPDF(data);
+            } else if (selectedReport === "cafe-da-manha") {
+                data = await fetchCafeDaManhaData();
+                await generateCafeDaManhaPDF(data);
             }
             showToast("Download iniciado!", "success");
         } catch (error) {
@@ -348,6 +420,7 @@ export default function Reports() {
             if (selectedReport === "jornada") data = await fetchJornadaData();
             else if (selectedReport === "employees") data = await fetchEmployeesData();
             else if (selectedReport === "marmitas") data = await fetchMarmitasData();
+            else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
 
             // 2. Set Preview Data & Type (triggers render)
             setPreviewData(data);
@@ -413,6 +486,15 @@ export default function Reports() {
             color: "text-orange-400",
             bg: "bg-orange-500/10",
             border: "border-orange-500/20"
+        },
+        {
+            id: "cafe-da-manha",
+            title: "Relatório de Café da Manhã",
+            description: "Contagem de café da manhã necessário por alojamento.",
+            icon: Coffee,
+            color: "text-purple-400",
+            bg: "bg-purple-500/10",
+            border: "border-purple-500/20"
         }
     ];
 
@@ -498,7 +580,7 @@ export default function Reports() {
             )}
 
             {/* Hidden Preview Area for HTML2Canvas */}
-            <div className="fixed top-0 left-0 -z-50 opacity-0 pointer-events-none w-[800px] bg-white text-black p-8" ref={previewRef}>
+            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className="w-[800px] bg-white text-black p-8" ref={previewRef}>
                 {previewData && (
                     <div className="space-y-6">
                         <div className="flex items-center gap-4 mb-8 border-b pb-4">
@@ -508,6 +590,7 @@ export default function Reports() {
                                     {previewType === "jornada" && "Relatório de Jornada"}
                                     {previewType === "employees" && "Lista de Colaboradores"}
                                     {previewType === "marmitas" && "Relatório de Marmitas"}
+                                    {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
                                 </h1>
                                 <p className="text-gray-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
                             </div>
@@ -608,6 +691,37 @@ export default function Reports() {
                                             <td className="p-2 border border-gray-300">{previewData.employeeCounts[acc.id] || 0}</td>
                                         </tr>
                                     ))}
+                                    <tr className="text-center font-bold bg-gray-100">
+                                        <td className="p-2 border border-gray-300 text-left">TOTAL</td>
+                                        <td className="p-2 border border-gray-300">
+                                            {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        )}
+
+                        {previewType === "cafe-da-manha" && (
+                            <table className="w-full text-sm border-collapse border border-gray-300">
+                                <thead>
+                                    <tr className="bg-blue-600 text-white">
+                                        <th className="p-2 border border-gray-300 text-left">Alojamento</th>
+                                        <th className="p-2 border border-gray-300">Quantidade Café da Manhã</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {previewData.accommodations.map((acc: any) => (
+                                        <tr key={acc.id} className="text-center">
+                                            <td className="p-2 border border-gray-300 text-left">{acc.name}</td>
+                                            <td className="p-2 border border-gray-300">{previewData.employeeCounts[acc.id] || 0}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="text-center font-bold bg-gray-100">
+                                        <td className="p-2 border border-gray-300 text-left">TOTAL</td>
+                                        <td className="p-2 border border-gray-300">
+                                            {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         )}

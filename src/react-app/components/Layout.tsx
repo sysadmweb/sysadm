@@ -20,6 +20,7 @@ import {
     ClipboardCheck,
     Clock,
     Tag,
+    Activity,
 } from "lucide-react";
 
 export default function Layout() {
@@ -51,6 +52,7 @@ export default function Layout() {
         // { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
         { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
         { path: "/categories", icon: Tag, label: "Categorias", key: "categories" },
+        { path: "/status", icon: Activity, label: "Status", key: "status" },
         { path: "/inspection", icon: ClipboardCheck, label: "Vistorias", key: "inspection" },
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },

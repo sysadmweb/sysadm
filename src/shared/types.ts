@@ -124,6 +124,24 @@ export const UpdateRoomSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// Status schemas
+export const StatusSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateStatusSchema = z.object({
+  name: z.string().min(1),
+});
+
+export const UpdateStatusSchema = z.object({
+  name: z.string().min(1).optional(),
+  is_active: z.boolean().optional(),
+});
+
 // Employee schemas
 export const EmployeeSchema = z.object({
   id: z.number(),
@@ -133,9 +151,8 @@ export const EmployeeSchema = z.object({
   observation: z.string().nullable(),
   unit_id: z.number(),
   accommodation_id: z.number().nullable(),
-  room_id: z.number().nullable(),
+  status_id: z.number().nullable(),
   function_id: z.number().nullable(),
-  status: z.string().nullable(),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -148,9 +165,8 @@ export const CreateEmployeeSchema = z.object({
   observation: z.string().nullable(),
   unit_id: z.number(),
   accommodation_id: z.number().nullable(),
-  room_id: z.number().nullable(),
+  status_id: z.number().nullable(),
   function_id: z.number().nullable(),
-  status: z.string().nullable(),
 });
 
 export const UpdateEmployeeSchema = z.object({
@@ -160,9 +176,8 @@ export const UpdateEmployeeSchema = z.object({
   observation: z.string().nullable().optional(),
   unit_id: z.number().optional(),
   accommodation_id: z.number().nullable().optional(),
-  room_id: z.number().nullable().optional(),
+  status_id: z.number().nullable().optional(),
   function_id: z.number().nullable().optional(),
-  status: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -197,6 +212,10 @@ export type UpdateFunctionInput = z.infer<typeof UpdateFunctionSchema>;
 export type Accommodation = z.infer<typeof AccommodationSchema>;
 export type CreateAccommodationInput = z.infer<typeof CreateAccommodationSchema>;
 export type UpdateAccommodationInput = z.infer<typeof UpdateAccommodationSchema>;
+
+export type Status = z.infer<typeof StatusSchema>;
+export type CreateStatusInput = z.infer<typeof CreateStatusSchema>;
+export type UpdateStatusInput = z.infer<typeof UpdateStatusSchema>;
 
 export type Room = z.infer<typeof RoomSchema>;
 export type CreateRoomInput = z.infer<typeof CreateRoomSchema>;

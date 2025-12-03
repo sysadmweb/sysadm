@@ -3,8 +3,7 @@ import { DashboardStats } from "@/shared/types";
 import { supabase } from "@/react-app/supabase";
 import { usePagePermissions } from "@/react-app/hooks/usePermissions";
 import { Loader2, UserCheck, Home, DollarSign, TagIcon } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
 export default function Dashboard() {
@@ -12,9 +11,7 @@ export default function Dashboard() {
   const { user: currentUser } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [employeesData, setEmployeesData] = useState<{ full_name: string; function_id: number | null; unit_id: number | null; is_active: boolean; arrival_date: string | null }[]>([]);
-  const [functionsData, setFunctionsData] = useState<{ id: number; name: string }[]>([]);
-  const [unitsData, setUnitsData] = useState<{ id: number; name: string }[]>([]);
+
   const [totalCost, setTotalCost] = useState(0);
 
   useEffect(() => {
@@ -25,7 +22,7 @@ export default function Dashboard() {
     try {
       type EmployeeLite = { id: number; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean; arrival_date: string | null };
       type FunctionLite = { id: number; name: string };
-      type UnitLite = { id: number; name: string };
+
 
       const employeeCountQuery = supabase
         .from("employees")
@@ -52,13 +49,12 @@ export default function Dashboard() {
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
-      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: units }, { data: invoices }, { data: manualPurchases }] = await Promise.all([
+      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: invoices }, { data: manualPurchases }] = await Promise.all([
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
         supabase.from("functions").select("id, name"),
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
-        isSuper || unitIds.length === 0 ? supabase.from("units").select("id, name") : supabase.from("units").select("id, name").in("id", unitIds),
         supabase.from("invoices").select("total_value"),
         supabase.from("manual_purchases").select("total_value").eq("is_active", true),
       ]);
@@ -89,9 +85,7 @@ export default function Dashboard() {
         count: employeesList.filter((e) => e.function_id === f.id && e.is_active).length,
       }));
 
-      setEmployeesData(employeesList.map((e) => ({ full_name: e.full_name, function_id: e.function_id, unit_id: e.unit_id, is_active: e.is_active, arrival_date: e.arrival_date })));
-      setFunctionsData(functionsList.map((f) => ({ id: f.id, name: f.name })));
-      setUnitsData(Array.isArray(units) ? (units as UnitLite[]).map((u) => ({ id: u.id, name: u.name })) : []);
+
 
       setStats({
         total_employees: totalEmployees ?? 0,
@@ -196,99 +190,7 @@ export default function Dashboard() {
         <h2 className="text-xl font-semibold text-slate-100 mb-6">
           Funcionários por Função
         </h2>
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={async () => {
-              const doc = new jsPDF();
-              const logoUrl = "/logo.png";
-              let logoDataUrl: string | null = null;
-              try {
-                const response = await fetch(logoUrl);
-                const blob = await response.blob();
-                logoDataUrl = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                });
-              } catch (error) {
-                console.error("Error loading logo:", error);
-              }
 
-              if (logoDataUrl) {
-                doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
-              }
-
-              doc.setFontSize(18);
-              doc.text("Lista de Colaboradores", 50, 20);
-
-              doc.setFontSize(11);
-              const startX = 50;
-              let currentY = 30;
-              const lineHeight = 6;
-
-              // Determine Unit Name for Header
-              let unitName = "Todas / Diversas";
-              if (currentUser?.unit_id) {
-                // If user is bound to a specific unit, try to find its name
-                // We might not have the full unit list if we are a super user viewing all, 
-                // but typically currentUser.unit_id implies a restriction.
-                // Let's try to look it up in unitsData if available, or just leave as generic if complex.
-                // Actually, if the user sees this dashboard, they see data based on their permissions.
-                // If they are restricted to one unit, we can try to show that unit name.
-                const u = unitsData.find(u => u.id === currentUser.unit_id);
-                if (u) unitName = u.name;
-              } else if (unitsData.length === 1) {
-                unitName = unitsData[0].name;
-              }
-
-              doc.text(`Obra: ${unitName}`, startX, currentY);
-              currentY += lineHeight;
-              doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
-
-              const activeEmployees = employeesData
-                .filter((e) => e.is_active && e.arrival_date)
-                .sort((a, b) => a.full_name.localeCompare(b.full_name));
-
-              const body = activeEmployees.map((e) => [
-                e.arrival_date ? new Date(e.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
-                e.full_name || "-",
-                functionsData.find((f) => f.id === e.function_id)?.name || "-",
-                unitsData.find((u) => u.id === (e.unit_id ?? -1))?.name || "-",
-              ]);
-
-              autoTable(doc, {
-                head: [["CHEGADA Á OBRA", "NOME COMPLETO", "FUNÇÃO", "OBRA"]],
-                body,
-                startY: 55,
-                theme: 'grid',
-                styles: {
-                  fontSize: 8,
-                  halign: 'center',
-                  valign: 'middle',
-                  lineColor: [200, 200, 200],
-                  lineWidth: 0.1,
-                },
-                headStyles: {
-                  fillColor: [41, 128, 185],
-                  textColor: 255,
-                  fontStyle: 'bold',
-                  halign: 'center',
-                },
-                columnStyles: {
-                  0: { halign: 'center' },
-                  1: { halign: 'left' },
-                  2: { halign: 'left' },
-                  3: { halign: 'left' },
-                },
-              });
-
-              doc.save("lista-colaboradores.pdf");
-            }}
-            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all"
-          >
-            Relatório
-          </button>
-        </div>
         {stats?.employees_by_function && stats.employees_by_function.length > 0 ? (
           <div className="space-y-4">
             {stats.employees_by_function.map((item, index) => (

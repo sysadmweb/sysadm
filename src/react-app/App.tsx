@@ -15,6 +15,7 @@ import PurchasesXmlPage from "@/react-app/pages/PurchasesXml";
 import PurchasesViewPage from "@/react-app/pages/PurchasesView";
 import WorkLogsPage from "@/react-app/pages/WorkLogs";
 import CategoriesPage from "@/react-app/pages/Categories";
+import StatusPage from "@/react-app/pages/Status";
 import ManualPurchasesPage from "@/react-app/pages/ManualPurchases";
 import ReportsPage from "@/react-app/pages/Reports";
 import Layout from "@/react-app/components/Layout";
@@ -49,6 +50,7 @@ export default function App() {
                         <Route path="purchases/manual" element={<ManualPurchasesPage />} />
                         <Route path="permissions" element={<PermissionsPage />} />
                         <Route path="categories" element={<CategoriesPage />} />
+                        <Route path="status" element={<StatusPage />} />
                         <Route path="jornada" element={<WorkLogsPage />} />
                         <Route path="reports" element={<ReportsPage />} />
                     </Route>

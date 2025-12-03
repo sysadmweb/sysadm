@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
-import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
+import { Employee, Unit, Accommodation, Status, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search } from "lucide-react";
 
@@ -9,13 +9,13 @@ export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [statuses, setStatuses] = useState<Status[]>([]);
   const [functions, setFunctions] = useState<Function[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortKey, setSortKey] = useState<"full_name" | "function" | "unit" | "room" | "status">("full_name");
+  const [sortKey, setSortKey] = useState<"full_name" | "function" | "unit" | "status">("full_name");
   const [sortAsc, setSortAsc] = useState(true);
   const [formData, setFormData] = useState({
     full_name: "",
@@ -24,9 +24,8 @@ export default function Employees() {
     observation: "",
     unit_id: 0,
     accommodation_id: null as number | null,
-    room_id: null as number | null,
+    status_id: null as number | null,
     function_id: null as number | null,
-    status: "",
   });
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
@@ -39,7 +38,7 @@ export default function Employees() {
     fetchEmployees();
     fetchUnits();
     fetchAccommodations();
-    fetchRooms();
+    fetchStatuses();
     fetchFunctions();
   }, []);
 
@@ -57,7 +56,7 @@ export default function Employees() {
       const base = supabase
         .from("employees")
         .select(
-          "id, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status, is_active, created_at, updated_at"
+          "id, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
         ;
@@ -125,35 +124,19 @@ export default function Employees() {
     }
   };
 
-  const fetchRooms = async () => {
+  const fetchStatuses = async () => {
     try {
-      const isSuper = currentUser?.is_super_user;
-      let unitIds: number[] = [];
-      if (!isSuper && currentUser?.id) {
-        const { data: links } = await supabase
-          .from("user_units")
-          .select("unit_id")
-          .eq("user_id", currentUser.id);
-        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
-      }
-      const accBase = supabase
-        .from("accommodations")
-        .select("id")
-        .eq("is_active", true);
-      const { data: accRows } = isSuper || unitIds.length === 0 ? await accBase : await accBase.in("unit_id", unitIds);
-      const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
       const { data, error } = await supabase
-        .from("rooms")
-        .select("id, accommodation_id, bed_count, is_active, created_at, updated_at")
-        .eq("is_active", true)
-        .in("accommodation_id", accIds.length ? accIds : [-1]);
+        .from("statuses")
+        .select("id, name, is_active, created_at, updated_at")
+        .eq("is_active", true);
       if (!error && Array.isArray(data)) {
-        setRooms(data as Room[]);
+        setStatuses(data as Status[]);
       } else {
-        setRooms([]);
+        setStatuses([]);
       }
     } catch (error) {
-      console.error("Error fetching rooms:", error);
+      console.error("Error fetching statuses:", error);
     }
   };
 
@@ -184,9 +167,7 @@ export default function Employees() {
         observation: (formData.observation || "").toUpperCase(),
         unit_id: formData.unit_id,
         accommodation_id: formData.accommodation_id,
-        room_id: formData.room_id,
-        function_id: formData.function_id,
-        status: (formData.status || "").toUpperCase(),
+        status_id: formData.status_id,
       };
       if (editingEmployee) {
         const { error } = await supabase
@@ -198,9 +179,7 @@ export default function Employees() {
             observation: payload.observation,
             unit_id: payload.unit_id,
             accommodation_id: payload.accommodation_id,
-            room_id: payload.room_id,
-            function_id: payload.function_id,
-            status: payload.status,
+            status_id: payload.status_id,
           })
           .eq("id", editingEmployee.id);
         if (error) {
@@ -218,9 +197,7 @@ export default function Employees() {
             observation: payload.observation,
             unit_id: payload.unit_id,
             accommodation_id: payload.accommodation_id,
-            room_id: payload.room_id,
-            function_id: payload.function_id,
-            status: payload.status,
+            status_id: payload.status_id,
             is_active: true,
           });
         if (error) {
@@ -268,9 +245,8 @@ export default function Employees() {
       observation: "",
       unit_id: units[0]?.id || 0,
       accommodation_id: null,
-      room_id: null,
+      status_id: null,
       function_id: null,
-      status: "",
     });
   };
 
@@ -283,16 +259,13 @@ export default function Employees() {
       observation: employee.observation || "",
       unit_id: employee.unit_id,
       accommodation_id: employee.accommodation_id,
-      room_id: employee.room_id,
+      status_id: employee.status_id,
       function_id: employee.function_id,
-      status: employee.status || "",
     });
     setShowModal(true);
   };
 
-  const filteredRooms = formData.accommodation_id
-    ? rooms.filter((r) => r.accommodation_id === formData.accommodation_id)
-    : [];
+
 
   const displayedEmployees = (() => {
     const term = (searchTerm || "").toUpperCase();
@@ -311,12 +284,10 @@ export default function Employees() {
       } else if (sortKey === "unit") {
         va = getUnitName(a.unit_id);
         vb = getUnitName(b.unit_id);
-      } else if (sortKey === "room") {
-        va = a.room_id ?? 0;
-        vb = b.room_id ?? 0;
       } else if (sortKey === "status") {
-        va = a.status || "";
-        vb = b.status || "";
+        const getStatusName = (id: number | null) => statuses.find((s) => s.id === id)?.name || "";
+        va = getStatusName(a.status_id);
+        vb = getStatusName(b.status_id);
       }
       if (typeof va === "number" && typeof vb === "number") {
         return sortAsc ? va - vb : vb - va;
@@ -394,6 +365,7 @@ export default function Employees() {
                   { key: "function", label: "Função" },
                   { key: "unit", label: "Unidade" },
                   { key: "accommodation", label: "Alojamento" },
+                  { key: "status", label: "Status" },
                 ].map((col) => (
                   <th key={col.key} className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
                     <button
@@ -444,6 +416,9 @@ export default function Employees() {
                   </td>
                   <td className="px-6 py-4 text-slate-300">
                     {accommodations.find((a) => a.id === employee.accommodation_id)?.name || "-"}
+                  </td>
+                  <td className="px-6 py-4 text-slate-300">
+                    {statuses.find((s) => s.id === employee.status_id)?.name || "-"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2">
@@ -521,7 +496,9 @@ export default function Employees() {
               </div>
               <div>
                 <p className="text-slate-400 text-xs">Status</p>
-                <p className="text-slate-200 text-sm">{employee.status || "-"}</p>
+                <p className="text-slate-200 text-sm">
+                  {statuses.find((s) => s.id === employee.status_id)?.name || "-"}
+                </p>
               </div>
             </div>
           </div>
@@ -584,7 +561,7 @@ export default function Employees() {
                     Unidade
                   </label>
                   <select
-                    value={formData.unit_id}
+                    value={formData.unit_id || ""}
                     onChange={(e) =>
                       setFormData({ ...formData, unit_id: parseInt(e.target.value) })
                     }
@@ -632,7 +609,6 @@ export default function Employees() {
                       setFormData({
                         ...formData,
                         accommodation_id: e.target.value ? parseInt(e.target.value) : null,
-                        room_id: null,
                       })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -646,38 +622,25 @@ export default function Employees() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Quarto</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
                   <select
-                    value={formData.room_id || ""}
+                    value={formData.status_id || ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        room_id: e.target.value ? parseInt(e.target.value) : null,
+                        status_id: e.target.value ? parseInt(e.target.value) : null,
                       })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    disabled={!formData.accommodation_id}
                   >
                     <option value="">Nenhum</option>
-                    {filteredRooms.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        Quarto {room.id} ({room.bed_count} cama
-                        {room.bed_count > 1 ? "s" : ""})
+                    {statuses.map((status) => (
+                      <option key={status.id} value={status.id}>
+                        {status.name}
                       </option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
-                <input
-                  type="text"
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value.toUpperCase() })}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                  placeholder="Ex: Ativo, Férias, etc."
-                />
               </div>
 
               <div>
