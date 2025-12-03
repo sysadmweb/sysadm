@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
-import { Loader2, Save, Trash2, Edit, Plus, FileDown, Calendar, User } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { Loader2, Save, Trash2, Edit, Plus, Calendar, User } from "lucide-react";
 
 type Employee = {
     id: number;
@@ -10,10 +8,7 @@ type Employee = {
     unit_id: number;
 };
 
-type Unit = {
-    id: number;
-    name: string;
-};
+
 
 type WorkLog = {
     id: number;
@@ -28,7 +23,6 @@ type WorkLog = {
 
 export default function WorkLogs() {
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [units, setUnits] = useState<Unit[]>([]);
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -57,19 +51,16 @@ export default function WorkLogs() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [empRes, logsRes, unitsRes] = await Promise.all([
+            const [empRes, logsRes] = await Promise.all([
                 supabase.from("employees").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
                 supabase.from("work_logs").select("*").order("work_date", { ascending: false }),
-                supabase.from("units").select("id, name").eq("is_active", true)
             ]);
 
             if (empRes.error) throw empRes.error;
             if (logsRes.error) throw logsRes.error;
-            if (unitsRes.error) throw unitsRes.error;
 
             setEmployees(empRes.data || []);
             setWorkLogs(logsRes.data || []);
-            setUnits(unitsRes.data || []);
         } catch (error) {
             console.error("Error fetching data:", error);
             showToast("Erro ao carregar dados.", "error");
@@ -165,100 +156,7 @@ export default function WorkLogs() {
         setShowModal(true);
     };
 
-    const generatePDF = async () => {
-        const doc = new jsPDF();
-        const logoUrl = "/logo.png";
 
-        // Group logs by employee
-        const groupedLogs: Record<number, WorkLog[]> = {};
-        workLogs.forEach(log => {
-            if (!groupedLogs[log.employee_id]) {
-                groupedLogs[log.employee_id] = [];
-            }
-            groupedLogs[log.employee_id].push(log);
-        });
-
-        const employeeIds = Object.keys(groupedLogs).map(Number);
-
-        // Load logo
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
-
-        employeeIds.forEach((empId, index) => {
-            if (index > 0) {
-                doc.addPage();
-            }
-
-            const employee = employees.find(e => e.id === empId);
-            const unit = units.find(u => u.id === employee?.unit_id);
-            const logs = groupedLogs[empId].sort((a, b) => new Date(b.work_date).getTime() - new Date(a.work_date).getTime());
-
-            // Header
-            if (logoDataUrl) {
-                doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
-            }
-
-            doc.setFontSize(18);
-            doc.text("Relatório de Jornada", 50, 20);
-
-            doc.setFontSize(11);
-            const startX = 50;
-            let currentY = 30;
-            const lineHeight = 6;
-
-            doc.text(`Colaborador: ${employee?.full_name || "Desconhecido"}`, startX, currentY);
-            currentY += lineHeight;
-            doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
-            currentY += lineHeight;
-            doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
-
-            // Table
-            autoTable(doc, {
-                startY: 55,
-                head: [["Data", "Entrada", "Saída Almoço", "Volta Almoço", "Saída"]],
-                body: logs.map(log => [
-                    new Date(log.work_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
-                    log.entry_time_1?.slice(0, 5) || "-",
-                    log.exit_time_1?.slice(0, 5) || "-",
-                    log.entry_time_2?.slice(0, 5) || "-",
-                    log.exit_time_2?.slice(0, 5) || "-"
-                ]),
-                theme: 'grid',
-                styles: {
-                    fontSize: 10,
-                    halign: 'center',
-                    valign: 'middle',
-                    lineColor: [200, 200, 200],
-                    lineWidth: 0.1,
-                },
-                headStyles: {
-                    fillColor: [41, 128, 185],
-                    textColor: 255,
-                    fontStyle: 'bold',
-                    halign: 'center',
-                },
-                columnStyles: {
-                    0: { halign: 'center' }, // Data
-                    1: { halign: 'center' }, // Entrada
-                    2: { halign: 'center' }, // Saída Almoço
-                    3: { halign: 'center' }, // Volta Almoço
-                    4: { halign: 'center' }, // Saída
-                },
-            });
-        });
-
-        doc.save("relatorio_jornada.pdf");
-    };
 
     return (
         <div className="space-y-6">
@@ -274,13 +172,7 @@ export default function WorkLogs() {
                     <p className="text-sm md:text-base text-slate-400 mt-1">Registro de horários dos colaboradores</p>
                 </div>
                 <div className="flex gap-3 w-full md:w-auto">
-                    <button
-                        onClick={generatePDF}
-                        className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all border border-slate-700"
-                    >
-                        <FileDown className="w-5 h-5" />
-                        <span className="hidden sm:inline">Exportar</span>
-                    </button>
+
                     <button
                         onClick={openNewModal}
                         className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"

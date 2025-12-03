@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Accommodation, Unit } from "@/shared/types";
-import { Plus, Edit, Trash2, Loader2, Home, FileDown } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, Home } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
 export default function Accommodations() {
@@ -201,72 +199,7 @@ export default function Accommodations() {
           <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os alojamentos das unidades</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={async () => {
-              const doc = new jsPDF();
-              const logoUrl = "/logo.png";
-              let logoDataUrl: string | null = null;
-              try {
-                const response = await fetch(logoUrl);
-                const blob = await response.blob();
-                logoDataUrl = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                });
-              } catch (error) {
-                console.error("Error loading logo:", error);
-              }
 
-              if (logoDataUrl) {
-                doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
-              }
-
-              doc.setFontSize(18);
-              doc.text("Relatório de Marmitas", 50, 20);
-
-              doc.setFontSize(11);
-              const startX = 50;
-              let currentY = 30;
-
-              doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
-
-              const body = accommodations.map((acc) => [
-                acc.name || "-",
-                (employeeCounts[acc.id] || 0).toString(),
-              ]);
-
-              autoTable(doc, {
-                head: [["ALOJAMENTO", "MARMITAS"]],
-                body,
-                startY: 45,
-                theme: 'grid',
-                styles: {
-                  fontSize: 10,
-                  halign: 'center',
-                  valign: 'middle',
-                  lineColor: [200, 200, 200],
-                  lineWidth: 0.1,
-                },
-                headStyles: {
-                  fillColor: [41, 128, 185],
-                  textColor: 255,
-                  fontStyle: 'bold',
-                  halign: 'center',
-                },
-                columnStyles: {
-                  0: { halign: 'left' },
-                  1: { halign: 'center' },
-                },
-              });
-
-              doc.save("relatorio-marmitas.pdf");
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all border border-slate-700"
-          >
-            <FileDown className="w-5 h-5" />
-            <span className="hidden sm:inline">Relatório</span>
-          </button>
           <button
             onClick={() => {
               setEditingAccommodation(null);
@@ -346,18 +279,18 @@ export default function Accommodations() {
                 <div className="p-2 bg-slate-800 rounded-lg">
                   <Home className="w-5 h-5 text-green-400" />
                 </div>
-              <div>
-                <h3 className="text-slate-200 font-medium text-sm">{accommodation.name}</h3>
-                <p className="text-slate-400 text-xs">
-                  {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
-                </p>
-                <p className="text-slate-500 text-xs mt-1">
-                  {accommodation.bed_count} camas
-                </p>
-                <p className="text-slate-500 text-xs mt-1">
-                  Vagas Disponível: {(accommodation.bed_count || 0) - (employeeCounts[accommodation.id] || 0)}
-                </p>
-              </div>
+                <div>
+                  <h3 className="text-slate-200 font-medium text-sm">{accommodation.name}</h3>
+                  <p className="text-slate-400 text-xs">
+                    {units.find((u) => u.id === accommodation.unit_id)?.name || "-"}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {accommodation.bed_count} camas
+                  </p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Vagas Disponível: {(accommodation.bed_count || 0) - (employeeCounts[accommodation.id] || 0)}
+                  </p>
+                </div>
               </div>
               <div className="flex gap-1">
                 <button

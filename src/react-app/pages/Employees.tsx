@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Room, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search, FileDown } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search } from "lucide-react";
 
 export default function Employees() {
   const { user: currentUser } = useAuth();
@@ -332,101 +330,7 @@ export default function Employees() {
     return filtered.slice().sort(compare);
   })();
 
-  const generatePDF = async () => {
-    const doc = new jsPDF();
-    const logoUrl = "/logo.png";
 
-    // Filter employees: arrival_date filled AND departure_date empty
-    const activeEmployees = employees.filter(e => e.arrival_date && !e.departure_date);
-
-    if (activeEmployees.length === 0) {
-      showToast("Nenhum colaborador ativo para exportar.", "error");
-      return;
-    }
-
-    // Group by unit
-    const groupedEmployees: Record<number, Employee[]> = {};
-    activeEmployees.forEach(emp => {
-      if (!groupedEmployees[emp.unit_id]) {
-        groupedEmployees[emp.unit_id] = [];
-      }
-      groupedEmployees[emp.unit_id].push(emp);
-    });
-
-    const unitIds = Object.keys(groupedEmployees).map(Number);
-
-    // Load logo
-    let logoDataUrl: string | null = null;
-    try {
-      const response = await fetch(logoUrl);
-      const blob = await response.blob();
-      logoDataUrl = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error("Error loading logo:", error);
-    }
-
-    unitIds.forEach((unitId, index) => {
-      if (index > 0) {
-        doc.addPage();
-      }
-
-      const unit = units.find(u => u.id === unitId);
-      const unitEmployees = groupedEmployees[unitId].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
-
-      // Header
-      if (logoDataUrl) {
-        doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
-      }
-
-      doc.setFontSize(18);
-      doc.text("LISTA DE COLABORADORES", 50, 20);
-
-      doc.setFontSize(11);
-      const startX = 50;
-      let currentY = 30;
-      const lineHeight = 6;
-
-      doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
-      currentY += lineHeight;
-      doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
-
-      // Table
-      autoTable(doc, {
-        startY: 50,
-        head: [["CHEGADA À OBRA", "COLABORADOR", "FUNÇÃO"]],
-        body: unitEmployees.map(emp => [
-          emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
-          emp.full_name || "-",
-          functions.find(f => f.id === emp.function_id)?.name || "-"
-        ]),
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          halign: 'center',
-          valign: 'middle',
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
-        },
-        headStyles: {
-          fillColor: [41, 128, 185],
-          textColor: 255,
-          fontStyle: 'bold',
-          halign: 'center',
-        },
-        columnStyles: {
-          0: { halign: 'center' }, // Chegada
-          1: { halign: 'left' },   // Colaborador
-          2: { halign: 'center' }, // Função
-        },
-      });
-    });
-
-    doc.save("lista_colaboradores.pdf");
-  };
 
   if (isLoading) {
     return (
@@ -452,13 +356,7 @@ export default function Employees() {
           <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
         <div className="w-full md:w-auto flex items-center gap-3">
-          <button
-            onClick={generatePDF}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all border border-slate-700"
-          >
-            <FileDown className="w-5 h-5" />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
+
           <button
             onClick={() => {
               setEditingEmployee(null);

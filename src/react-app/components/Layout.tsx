@@ -53,6 +53,7 @@ export default function Layout() {
         { path: "/categories", icon: Tag, label: "Categorias", key: "categories" },
         { path: "/inspection", icon: ClipboardCheck, label: "Vistorias", key: "inspection" },
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
+        { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
         {
             path: "/purchases",
             icon: ShoppingCart,
