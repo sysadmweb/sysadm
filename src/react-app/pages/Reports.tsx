@@ -29,6 +29,9 @@ export default function Reports() {
     const [previewType, setPreviewType] = useState<string | null>(null);
     const previewRef = useRef<HTMLDivElement>(null);
 
+    // State for report date
+    const [reportDate, setReportDate] = useState<string>("");
+
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
         setTimeout(() => setToast(null), 3000);
@@ -461,6 +464,10 @@ export default function Reports() {
 
     const handleMealJPEG = async (mealType: "almoco" | "janta") => {
         if (!selectedReport) return;
+        if (!reportDate) {
+            showToast("Por favor, selecione uma data.", "error");
+            return;
+        }
         setLoadingReport(selectedReport + "-" + mealType);
         try {
             // 1. Fetch Data
@@ -468,8 +475,8 @@ export default function Reports() {
             if (selectedReport === "marmitas") data = await fetchMarmitasData();
             else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
 
-            // 2. Set Preview Data & Type with meal type
-            setPreviewData({ ...data, mealType });
+            // 2. Set Preview Data & Type with meal type and date
+            setPreviewData({ ...data, mealType, reportDate });
             setPreviewType(selectedReport);
 
             // 3. Wait for render
@@ -507,13 +514,17 @@ export default function Reports() {
     };
 
     const handleCafeDaManhaDirectJPEG = async () => {
+        if (!reportDate) {
+            showToast("Por favor, selecione uma data.", "error");
+            return;
+        }
         setLoadingReport("cafe-da-manha");
         try {
             // 1. Fetch Data
             const data = await fetchCafeDaManhaData();
 
-            // 2. Set Preview Data & Type (no meal type for cafe da manha)
-            setPreviewData(data);
+            // 2. Set Preview Data & Type with date
+            setPreviewData({ ...data, reportDate });
             setPreviewType("cafe-da-manha");
 
             // 3. Wait for render
@@ -610,6 +621,21 @@ export default function Reports() {
                         </div>
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
+
+                        {/* Date input for Café da Manhã */}
+                        {report.id === "cafe-da-manha" && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
+                                <input
+                                    type="date"
+                                    value={reportDate}
+                                    onChange={(e) => setReportDate(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                    required
+                                />
+                            </div>
+                        )}
+
                         <button
                             onClick={() => {
                                 if (report.id === "cafe-da-manha") {
@@ -650,6 +676,16 @@ export default function Reports() {
                         {/* Show Almoço/Janta buttons only for marmitas */}
                         {selectedReport === "marmitas" ? (
                             <>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório *</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                                        required
+                                    />
+                                </div>
                                 <p className="text-slate-400 text-sm mb-6">Escolha o tipo de refeição:</p>
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
@@ -737,7 +773,7 @@ export default function Reports() {
                                     )}
                                     {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
                                 </h1>
-                                <p className="text-gray-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                                <p className="text-gray-500">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                             </div>
                         </div>
 
