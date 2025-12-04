@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { FileDown, Loader2, Utensils, Clock, Users, Share2, X, Coffee } from "lucide-react";
+import { FileDown, Loader2, Utensils, Clock, Users, Share2, X, Coffee, Sun, Moon } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
@@ -459,6 +459,95 @@ export default function Reports() {
         }
     };
 
+    const handleMealJPEG = async (mealType: "almoco" | "janta") => {
+        if (!selectedReport) return;
+        setLoadingReport(selectedReport + "-" + mealType);
+        try {
+            // 1. Fetch Data
+            let data;
+            if (selectedReport === "marmitas") data = await fetchMarmitasData();
+            else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
+
+            // 2. Set Preview Data & Type with meal type
+            setPreviewData({ ...data, mealType });
+            setPreviewType(selectedReport);
+
+            // 3. Wait for render
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 4. Capture
+            if (previewRef.current) {
+                const canvas = await html2canvas(previewRef.current, {
+                    scale: 2,
+                    backgroundColor: "#ffffff",
+                    useCORS: true
+                });
+
+                // 5. Download
+                const link = document.createElement('a');
+                const reportName = selectedReport === "marmitas" ? "marmitas" : "cafe-da-manha";
+                link.download = `relatorio_${reportName}_${mealType}.jpg`;
+                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.click();
+
+                showToast("Imagem gerada com sucesso!", "success");
+            } else {
+                throw new Error("Preview element not found");
+            }
+
+        } catch (error) {
+            console.error("Error generating JPEG:", error);
+            showToast("Erro ao gerar imagem.", "error");
+        } finally {
+            setLoadingReport(null);
+            setSelectedReport(null);
+            setPreviewData(null);
+            setPreviewType(null);
+        }
+    };
+
+    const handleCafeDaManhaDirectJPEG = async () => {
+        setLoadingReport("cafe-da-manha");
+        try {
+            // 1. Fetch Data
+            const data = await fetchCafeDaManhaData();
+
+            // 2. Set Preview Data & Type (no meal type for cafe da manha)
+            setPreviewData(data);
+            setPreviewType("cafe-da-manha");
+
+            // 3. Wait for render
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 4. Capture
+            if (previewRef.current) {
+                const canvas = await html2canvas(previewRef.current, {
+                    scale: 2,
+                    backgroundColor: "#ffffff",
+                    useCORS: true
+                });
+
+                // 5. Download
+                const link = document.createElement('a');
+                link.download = `relatorio_cafe-da-manha.jpg`;
+                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.click();
+
+                showToast("Imagem gerada com sucesso!", "success");
+            } else {
+                throw new Error("Preview element not found");
+            }
+
+        } catch (error) {
+            console.error("Error generating JPEG:", error);
+            showToast("Erro ao gerar imagem.", "error");
+        } finally {
+            setLoadingReport(null);
+            setPreviewData(null);
+            setPreviewType(null);
+        }
+    };
+
     const reports = [
         {
             id: "jornada",
@@ -522,10 +611,21 @@ export default function Reports() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
                         <button
-                            onClick={() => setSelectedReport(report.id)}
+                            onClick={() => {
+                                if (report.id === "cafe-da-manha") {
+                                    handleCafeDaManhaDirectJPEG();
+                                } else {
+                                    setSelectedReport(report.id);
+                                }
+                            }}
+                            disabled={loadingReport === "cafe-da-manha" && report.id === "cafe-da-manha"}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all border border-slate-700"
                         >
-                            <FileDown className="w-5 h-5" />
+                            {loadingReport === "cafe-da-manha" && report.id === "cafe-da-manha" ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <FileDown className="w-5 h-5" />
+                            )}
                             <span>Gerar Relatório</span>
                         </button>
                     </div>
@@ -546,35 +646,71 @@ export default function Reports() {
                         <h3 className="text-xl font-bold text-white mb-2">
                             {reports.find(r => r.id === selectedReport)?.title}
                         </h3>
-                        <p className="text-slate-400 text-sm mb-6">Escolha o formato para exportação:</p>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <button
-                                onClick={handleDownloadPDF}
-                                disabled={loadingReport !== null}
-                                className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
-                            >
-                                {loadingReport === selectedReport ? (
-                                    <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-                                ) : (
-                                    <FileDown className="w-8 h-8 text-blue-400" />
-                                )}
-                                <span className="text-slate-200 font-medium">Download (PDF)</span>
-                            </button>
+                        {/* Show Almoço/Janta buttons only for marmitas */}
+                        {selectedReport === "marmitas" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Escolha o tipo de refeição:</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        onClick={() => handleMealJPEG("almoco")}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === selectedReport + "-almoco" ? (
+                                            <Loader2 className="w-8 h-8 text-yellow-400 animate-spin" />
+                                        ) : (
+                                            <Sun className="w-8 h-8 text-yellow-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Almoço</span>
+                                    </button>
 
-                            <button
-                                onClick={handleShareJPEG}
-                                disabled={loadingReport !== null}
-                                className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
-                            >
-                                {loadingReport === selectedReport ? (
-                                    <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
-                                ) : (
-                                    <Share2 className="w-8 h-8 text-green-400" />
-                                )}
-                                <span className="text-slate-200 font-medium">Compartilhar (JPEG)</span>
-                            </button>
-                        </div>
+                                    <button
+                                        onClick={() => handleMealJPEG("janta")}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === selectedReport + "-janta" ? (
+                                            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                                        ) : (
+                                            <Moon className="w-8 h-8 text-indigo-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Janta</span>
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Escolha o formato para exportação:</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        onClick={handleDownloadPDF}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === selectedReport ? (
+                                            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                                        ) : (
+                                            <FileDown className="w-8 h-8 text-blue-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Download (PDF)</span>
+                                    </button>
+
+                                    <button
+                                        onClick={handleShareJPEG}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === selectedReport ? (
+                                            <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+                                        ) : (
+                                            <Share2 className="w-8 h-8 text-green-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Compartilhar (JPEG)</span>
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -589,7 +725,16 @@ export default function Reports() {
                                 <h1 className="text-2xl font-bold text-gray-900">
                                     {previewType === "jornada" && "Relatório de Jornada"}
                                     {previewType === "employees" && "Lista de Colaboradores"}
-                                    {previewType === "marmitas" && "Relatório de Marmitas"}
+                                    {previewType === "marmitas" && (
+                                        <div>
+                                            <div>Relatório de Marmitas</div>
+                                            {previewData.mealType && (
+                                                <div className="text-base font-bold text-black mt-1">
+                                                    {previewData.mealType === "almoco" ? "Almoço" : "Janta"}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
                                 </h1>
                                 <p className="text-gray-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
