@@ -132,7 +132,10 @@ export default function Reports() {
             }
         });
 
-        return { accommodations, employeeCounts };
+        // Filter accommodations to show only those with at least 1 employee
+        const accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
+
+        return { accommodations: accommodationsWithEmployees, employeeCounts };
     };
 
     const fetchCafeDaManhaData = async () => {
