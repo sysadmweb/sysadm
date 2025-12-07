@@ -10,6 +10,8 @@ import FunctionsPage from "@/react-app/pages/Functions";
 import AccommodationsPage from "@/react-app/pages/Accommodations";
 import RoomsPage from "@/react-app/pages/Rooms";
 import EmployeesPage from "@/react-app/pages/Employees";
+import EmployeeListPage from "@/react-app/pages/EmployeeList";
+import TransferPage from "@/react-app/pages/Transfer";
 import InspectionPage from "@/react-app/pages/Inspection";
 import PurchasesXmlPage from "@/react-app/pages/PurchasesXml";
 import PurchasesViewPage from "@/react-app/pages/PurchasesView";
@@ -18,6 +20,9 @@ import CategoriesPage from "@/react-app/pages/Categories";
 import StatusPage from "@/react-app/pages/Status";
 import ManualPurchasesPage from "@/react-app/pages/ManualPurchases";
 import ReportsPage from "@/react-app/pages/Reports";
+import StockMovementPage from "@/react-app/pages/StockMovement";
+import ProductMovementPage from "@/react-app/pages/ProductMovement";
+import CleanersPage from "@/react-app/pages/Cleaners";
 import Layout from "@/react-app/components/Layout";
 import ProtectedRoute from "@/react-app/components/ProtectedRoute";
 
@@ -44,6 +49,8 @@ export default function App() {
                         <Route path="accommodations" element={<AccommodationsPage />} />
                         <Route path="rooms" element={<RoomsPage />} />
                         <Route path="employees" element={<EmployeesPage />} />
+                        <Route path="employees/list" element={<EmployeeListPage />} />
+                        <Route path="employees/transfer" element={<TransferPage />} />
                         <Route path="inspection" element={<InspectionPage />} />
                         <Route path="purchases/xml" element={<PurchasesXmlPage />} />
                         <Route path="purchases/view" element={<PurchasesViewPage />} />
@@ -53,6 +60,9 @@ export default function App() {
                         <Route path="status" element={<StatusPage />} />
                         <Route path="jornada" element={<WorkLogsPage />} />
                         <Route path="reports" element={<ReportsPage />} />
+                        <Route path="stock/movement" element={<StockMovementPage />} />
+                        <Route path="stock/product-movement" element={<ProductMovementPage />} />
+                        <Route path="cleaners" element={<CleanersPage />} />
                     </Route>
                 </Routes>
             </Router>

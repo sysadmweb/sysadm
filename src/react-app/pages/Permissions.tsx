@@ -34,6 +34,9 @@ export default function Permissions() {
     () => [
       "dashboard",
       "employees",
+      "employees_integration",
+      "employees_list",
+      "employees_transfer",
       "accommodations",
       "rooms",
       "functions",
@@ -44,13 +47,17 @@ export default function Permissions() {
       "manual_purchases",
       "categories",
       "jornada",
+      "stock",
     ],
     []
   );
 
   const pageLabels: Record<string, string> = {
     dashboard: "Dashboard",
-    employees: "Funcionários",
+    employees: "Funcionários (Menu)",
+    employees_integration: "Integração",
+    employees_list: "Lista de Funcionários",
+    employees_transfer: "Transferência",
     accommodations: "Alojamentos",
     rooms: "Quartos",
     functions: "Funções",
@@ -61,6 +68,7 @@ export default function Permissions() {
     manual_purchases: "Lançamento Avulso",
     categories: "Categorias",
     jornada: "Jornada",
+    stock: "Estoque",
   };
 
   useEffect(() => {

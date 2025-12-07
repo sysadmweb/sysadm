@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { usePermissions } from "@/react-app/hooks/usePermissions";
 import {
@@ -21,6 +21,7 @@ import {
     Clock,
     Tag,
     Activity,
+    Package,
 } from "lucide-react";
 
 export default function Layout() {
@@ -30,11 +31,22 @@ export default function Layout() {
     const { get } = usePermissions();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+    const navRef = useRef<HTMLDivElement>(null);
 
     const toggleMenu = (key: string) => {
+        // Save current scroll position
+        const scrollPos = navRef.current?.scrollTop || 0;
+
         setExpandedMenus((prev) =>
             prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
         );
+
+        // Restore scroll position after state update
+        setTimeout(() => {
+            if (navRef.current) {
+                navRef.current.scrollTop = scrollPos;
+            }
+        }, 0);
     };
 
     useEffect(() => {
@@ -45,9 +57,27 @@ export default function Layout() {
         check();
     }, []);
 
-    const navItems = [
+    type NavItem = {
+        path: string;
+        icon: any;
+        label: string;
+        key: string;
+        children?: { path: string; icon: any; label: string; key?: string }[];
+    };
+
+    const rawNavItems: NavItem[] = [
         { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
-        { path: "/employees", icon: UserCircle, label: "Funcionários", key: "employees" },
+        {
+            path: "/employees-group",
+            icon: UserCircle,
+            label: "Funcionários",
+            key: "employees",
+            children: [
+                { path: "/employees", icon: UserCircle, label: "Integração", key: "employees_integration" },
+                { path: "/employees/list", icon: UserCircle, label: "Lista de funcionários", key: "employees_list" },
+                { path: "/employees/transfer", icon: UserCircle, label: "Transferência", key: "employees_transfer" },
+            ],
+        },
         { path: "/accommodations", icon: Home, label: "Alojamentos", key: "accommodations" },
         // { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
         { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
@@ -67,10 +97,42 @@ export default function Layout() {
                 { path: "/purchases/view", icon: FileText, label: "Visualizar Nota" },
             ],
         },
+        {
+            path: "/stock",
+            icon: Package,
+            label: "Estoque",
+            key: "stock",
+            children: [
+                { path: "/stock/movement", icon: Package, label: "Cadastro de Produto" },
+                { path: "/stock/product-movement", icon: Package, label: "Movimentação" },
+            ],
+        },
+        { path: "/cleaners", icon: Users, label: "Faxineiras", key: "cleaners" },
         ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades", key: "units" }] : []),
         ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários", key: "users" }] : []),
         ...(user?.is_super_user ? [{ path: "/permissions", icon: UserLock, label: "Regras", key: "permissions" }] : []),
-    ].filter((item) => get(item.key).can_view);
+    ];
+
+    const navItems = rawNavItems.filter((item) => {
+        // First check if the parent item itself is allowed
+        if (!get(item.key).can_view) return false;
+
+        // If it has children, filter them
+        if (item.children) {
+            const visibleChildren = item.children.filter((child) => {
+                // If child has a key, check permission. If not, assume it inherits parent's permission (or is always visible if parent is)
+                return child.key ? get(child.key).can_view : true;
+            });
+
+            // If no children are visible, hide the parent (optional, but usually desired)
+            if (visibleChildren.length === 0) return false;
+
+            // Update the item's children to only include visible ones
+            item.children = visibleChildren;
+        }
+
+        return true;
+    });
 
     const SidebarContent = () => (
         <div className="flex flex-col h-full">
@@ -81,7 +143,7 @@ export default function Layout() {
                 <p className="text-sm text-slate-400 mt-1">Gestão Administrativa</p>
             </div>
 
-            <nav className="p-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+            <nav ref={navRef} className="p-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
                 {navItems.map((item) => (
                     <div key={item.key}>
                         {item.children ? (
@@ -107,6 +169,7 @@ export default function Layout() {
                                             <NavLink
                                                 key={child.path}
                                                 to={child.path}
+                                                end
                                                 onClick={() => setMobileOpen(false)}
                                                 className={({ isActive }) =>
                                                     `flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${isActive

@@ -53,7 +53,7 @@ export default function Dashboard() {
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
-        supabase.from("functions").select("id, name"),
+        supabase.from("functions").select("id, name").eq("is_active", true),
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
         supabase.from("invoices").select("total_value"),
         supabase.from("manual_purchases").select("total_value").eq("is_active", true),

@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { FileDown, Loader2, Utensils, Clock, Users, Share2, X, Coffee, Sun, Moon } from "lucide-react";
+import { FileDown, Loader2, Utensils, Clock, Users, Share2, X, Coffee, Sun, Moon, UserCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
@@ -108,9 +108,26 @@ export default function Reports() {
 
     const fetchMarmitasData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
+
+        // Get status IDs for "AGUARDANDO INTEGRAÇÃO" and "TRABALHANDO DISPONIVEL"
+        const { data: statusData } = await supabase
+            .from("statuses")
+            .select("id, name")
+            .in("name", ["AGUARDANDO INTEGRAÇÃO", "TRABALHANDO DISPONIVEL"]);
+
+        if (!statusData || statusData.length === 0) {
+            throw new Error("Statuses not found");
+        }
+
+        const statusIds = statusData.map(s => s.id);
+
         const [accRes, empRes] = await Promise.all([
             supabase.from("accommodations").select("*").eq("is_active", true),
-            supabase.from("employees").select("accommodation_id").eq("is_active", true).not("accommodation_id", "is", null)
+            supabase.from("employees")
+                .select("accommodation_id")
+                .eq("is_active", true)
+                .not("accommodation_id", "is", null)
+                .in("status_id", statusIds)
         ]);
 
         if (accRes.error) throw accRes.error;
@@ -140,6 +157,44 @@ export default function Reports() {
 
     const fetchCafeDaManhaData = async () => {
         return await fetchMarmitasData();
+    };
+
+    const fetchIntegrationData = async () => {
+        const { isSuper, unitIds } = await fetchUserUnits();
+
+        // Get status ID for "AGUARDANDO INTEGRAÇÃO"
+        const { data: statusData } = await supabase
+            .from("statuses")
+            .select("id")
+            .eq("name", "AGUARDANDO INTEGRAÇÃO")
+            .single();
+
+        if (!statusData) throw new Error("Status 'AGUARDANDO INTEGRAÇÃO' not found");
+
+        const [empRes, funcsRes, statusRes] = await Promise.all([
+            supabase.from("employees")
+                .select("id, full_name, arrival_date, integration_date, function_id, status_id, unit_id")
+                .eq("is_active", true)
+                .eq("status_id", statusData.id),
+            supabase.from("functions").select("id, name").eq("is_active", true),
+            supabase.from("statuses").select("id, name").eq("is_active", true)
+        ]);
+
+        if (empRes.error) throw empRes.error;
+        if (funcsRes.error) throw funcsRes.error;
+        if (statusRes.error) throw statusRes.error;
+
+        let employees = empRes.data as Employee[] || [];
+        const functions = funcsRes.data as Function[] || [];
+        const statuses = statusRes.data as any[] || [];
+
+        if (!isSuper && unitIds.length > 0) {
+            employees = employees.filter(e => unitIds.includes(e.unit_id));
+        } else if (!isSuper && unitIds.length === 0) {
+            employees = [];
+        }
+
+        return { employees, functions, statuses };
     };
 
     // --- PDF Generators ---
@@ -387,6 +442,49 @@ export default function Reports() {
         doc.save("relatorio-cafe-da-manha.pdf");
     };
 
+
+
+    const generateIntegrationPDF = async (data: any) => {
+        const { employees, functions, statuses } = data;
+        if (employees.length === 0) {
+            showToast("Nenhum colaborador aguardando integração.", "error");
+            return;
+        }
+
+        const doc = new jsPDF();
+        const date = new Date().toLocaleDateString("pt-BR");
+
+        doc.setFontSize(16);
+        doc.text("Relatório de Integração", 14, 20);
+        doc.setFontSize(10);
+        doc.text(`Data de Emissão: ${date}`, 14, 28);
+
+        const tableData = employees.map((emp: Employee) => [
+            emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "-",
+            emp.integration_date ? new Date(emp.integration_date).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "-",
+            emp.full_name,
+            functions.find((f: Function) => f.id === emp.function_id)?.name || "-",
+            statuses.find((s: any) => s.id === emp.status_id)?.name || "-",
+        ]);
+
+        autoTable(doc, {
+            startY: 35,
+            head: [["CHEGADA Á OBRA", "DATA INTEGRAÇÃO", "COLABORADOR", "FUNÇÃO", "STATUS"]],
+            body: tableData,
+            styles: { fontSize: 7, cellPadding: 1 },
+            headStyles: { fillColor: [41, 128, 185] },
+            columnStyles: {
+                0: { cellWidth: 'auto' },
+                1: { cellWidth: 'auto' },
+                2: { cellWidth: 'auto' },
+                3: { cellWidth: 'auto' },
+                4: { cellWidth: 'auto' }
+            }
+        });
+
+        doc.save("relatorio_integracao.pdf");
+    };
+
     // --- Handlers ---
 
     const handleDownloadPDF = async () => {
@@ -406,6 +504,9 @@ export default function Reports() {
             } else if (selectedReport === "cafe-da-manha") {
                 data = await fetchCafeDaManhaData();
                 await generateCafeDaManhaPDF(data);
+            } else if (selectedReport === "integration") {
+                data = await fetchIntegrationData();
+                await generateIntegrationPDF(data);
             }
             showToast("Download iniciado!", "success");
         } catch (error) {
@@ -427,6 +528,7 @@ export default function Reports() {
             else if (selectedReport === "employees") data = await fetchEmployeesData();
             else if (selectedReport === "marmitas") data = await fetchMarmitasData();
             else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
+            else if (selectedReport === "integration") data = await fetchIntegrationData();
 
             // 2. Set Preview Data & Type (triggers render)
             setPreviewData(data);
@@ -438,7 +540,7 @@ export default function Reports() {
             // 4. Capture
             if (previewRef.current) {
                 const canvas = await html2canvas(previewRef.current, {
-                    scale: 2,
+                    scale: 3,
                     backgroundColor: "#ffffff",
                     useCORS: true
                 });
@@ -446,7 +548,7 @@ export default function Reports() {
                 // 5. Download
                 const link = document.createElement('a');
                 link.download = `relatorio_${selectedReport}.jpg`;
-                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.href = canvas.toDataURL("image/jpeg", 1.0);
                 link.click();
 
                 showToast("Imagem gerada com sucesso!", "success");
@@ -488,7 +590,7 @@ export default function Reports() {
             // 4. Capture
             if (previewRef.current) {
                 const canvas = await html2canvas(previewRef.current, {
-                    scale: 2,
+                    scale: 3,
                     backgroundColor: "#ffffff",
                     useCORS: true
                 });
@@ -497,7 +599,7 @@ export default function Reports() {
                 const link = document.createElement('a');
                 const reportName = selectedReport === "marmitas" ? "marmitas" : "cafe-da-manha";
                 link.download = `relatorio_${reportName}_${mealType}.jpg`;
-                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.href = canvas.toDataURL("image/jpeg", 1.0);
                 link.click();
 
                 showToast("Imagem gerada com sucesso!", "success");
@@ -536,7 +638,7 @@ export default function Reports() {
             // 4. Capture
             if (previewRef.current) {
                 const canvas = await html2canvas(previewRef.current, {
-                    scale: 2,
+                    scale: 3,
                     backgroundColor: "#ffffff",
                     useCORS: true
                 });
@@ -544,7 +646,7 @@ export default function Reports() {
                 // 5. Download
                 const link = document.createElement('a');
                 link.download = `relatorio_cafe-da-manha.jpg`;
-                link.href = canvas.toDataURL("image/jpeg", 0.9);
+                link.href = canvas.toDataURL("image/jpeg", 1.0);
                 link.click();
 
                 showToast("Imagem gerada com sucesso!", "success");
@@ -580,6 +682,15 @@ export default function Reports() {
             color: "text-green-400",
             bg: "bg-green-500/10",
             border: "border-green-500/20"
+        },
+        {
+            id: "integration",
+            title: "Relatório de Integração",
+            description: "Lista de colaboradores aguardando integração.",
+            icon: UserCircle,
+            color: "text-cyan-400",
+            bg: "bg-cyan-500/10",
+            border: "border-cyan-500/20"
         },
         {
             id: "marmitas",
@@ -755,7 +866,7 @@ export default function Reports() {
             )}
 
             {/* Hidden Preview Area for HTML2Canvas */}
-            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className="w-[800px] bg-white text-black p-8" ref={previewRef}>
+            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className="w-[1200px] bg-white text-black p-8" ref={previewRef}>
                 {previewData && (
                     <div className="space-y-6">
                         <div className="flex items-center gap-4 mb-8 border-b pb-4">
@@ -775,6 +886,7 @@ export default function Reports() {
                                         </div>
                                     )}
                                     {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
+                                    {previewType === "integration" && "Relatório de Integração"}
                                 </h1>
                                 <p className="text-gray-500">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                             </div>
@@ -906,6 +1018,31 @@ export default function Reports() {
                                             {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
                                         </td>
                                     </tr>
+                                </tbody>
+                            </table>
+                        )}
+
+                        {previewType === "integration" && (
+                            <table className="w-full text-sm border-collapse border border-gray-300">
+                                <thead>
+                                    <tr className="bg-blue-600 text-white">
+                                        <th className="p-2 border border-gray-300 whitespace-nowrap">Chegada à Obra</th>
+                                        <th className="p-2 border border-gray-300 whitespace-nowrap">Data Integração</th>
+                                        <th className="p-2 border border-gray-300 text-left whitespace-nowrap">Colaborador</th>
+                                        <th className="p-2 border border-gray-300 whitespace-nowrap">Função</th>
+                                        <th className="p-2 border border-gray-300 whitespace-nowrap">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {previewData.employees.map((emp: any) => (
+                                        <tr key={emp.id} className="text-center">
+                                            <td className="p-2 border border-gray-300 whitespace-nowrap">{emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
+                                            <td className="p-2 border border-gray-300 whitespace-nowrap">{emp.integration_date ? new Date(emp.integration_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
+                                            <td className="p-2 border border-gray-300 text-left whitespace-nowrap">{emp.full_name}</td>
+                                            <td className="p-2 border border-gray-300 whitespace-nowrap">{previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "-"}</td>
+                                            <td className="p-2 border border-gray-300 whitespace-nowrap">{previewData.statuses.find((s: any) => s.id === emp.status_id)?.name || "-"}</td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         )}

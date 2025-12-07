@@ -1,32 +1,52 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/react-app/supabase";
-import { Employee, Unit, Accommodation, Status, Function } from "@/shared/types";
-import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Edit, Trash2, Loader2, UserCircle, ChevronUp, ChevronDown, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "../supabase";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  Search,
+  Plus,
+  Edit,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Loader2,
+  UserCircle,
+  CheckCircle,
+} from "lucide-react";
+import { Employee, Unit, Status, Function, Accommodation } from "../../shared/types";
 
 export default function Employees() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLoading: authLoading } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
-  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [functions, setFunctions] = useState<Function[]>([]);
+  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortKey, setSortKey] = useState<keyof Employee | "unit" | "status" | "function" | "accommodation">("full_name");
+  const [sortAsc, setSortAsc] = useState(true);
+
+  // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortKey, setSortKey] = useState<"full_name" | "function" | "unit" | "status">("full_name");
-  const [sortAsc, setSortAsc] = useState(true);
   const [formData, setFormData] = useState({
     full_name: "",
     arrival_date: "",
     departure_date: "",
+    integration_date: "",
     observation: "",
     unit_id: 0,
     accommodation_id: null as number | null,
     status_id: null as number | null,
     function_id: null as number | null,
   });
+
+  // Approve Modal state
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approvingEmployee, setApprovingEmployee] = useState<Employee | null>(null);
+  const [approveType, setApproveType] = useState<"INTEGRATING" | "INTEGRATED">("INTEGRATING");
+  const [approveDate, setApproveDate] = useState("");
+
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
   const showToast = (text: string, kind: "success" | "error") => {
@@ -34,15 +54,28 @@ export default function Employees() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const [occupancy, setOccupancy] = useState<Record<number, number>>({});
+
   useEffect(() => {
-    fetchEmployees();
     fetchUnits();
-    fetchAccommodations();
     fetchStatuses();
     fetchFunctions();
+    fetchAccommodations();
+    fetchOccupancy();
   }, []);
 
+  useEffect(() => {
+    if (!authLoading) {
+      if (currentUser) {
+        fetchEmployees();
+      } else {
+        setIsLoading(false);
+      }
+    }
+  }, [currentUser, authLoading]);
+
   const fetchEmployees = async () => {
+    setIsLoading(true);
     try {
       const isSuper = currentUser?.is_super_user;
       let unitIds: number[] = [];
@@ -53,13 +86,28 @@ export default function Employees() {
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
+
+      // Get status ID for "AGUARDANDO INTEGRAÇÃO"
+      const { data: statusData } = await supabase
+        .from("statuses")
+        .select("id")
+        .eq("name", "AGUARDANDO INTEGRAÇÃO")
+        .single();
+
+      if (!statusData) {
+        console.error("Status 'AGUARDANDO INTEGRAÇÃO' not found");
+        setEmployees([]);
+        return;
+      }
+
       const base = supabase
         .from("employees")
         .select(
-          "id, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
+          "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
-        ;
+        .eq("status_id", statusData.id); // Filter by status
+
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
         setEmployees(data as Employee[]);
@@ -70,6 +118,28 @@ export default function Employees() {
       console.error("Error fetching employees:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchOccupancy = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("accommodation_id")
+        .eq("is_active", true)
+        .not("accommodation_id", "is", null);
+
+      if (!error && data) {
+        const counts: Record<number, number> = {};
+        data.forEach((emp) => {
+          if (emp.accommodation_id) {
+            counts[emp.accommodation_id] = (counts[emp.accommodation_id] || 0) + 1;
+          }
+        });
+        setOccupancy(counts);
+      }
+    } catch (error) {
+      console.error("Error fetching occupancy:", error);
     }
   };
 
@@ -84,59 +154,37 @@ export default function Employees() {
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
-      const { data, error } = await supabase
-        .from("units")
-        .select("id, name, is_active, created_at, updated_at");
+
+      const base = supabase.from("units").select("id, name").eq("is_active", true);
+      const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("id", unitIds);
+
       if (!error && Array.isArray(data)) {
-        const list = (data as Unit[]).filter((u) => u.is_active);
-        setUnits(isSuper ? list : list.filter((u) => unitIds.includes(u.id)));
-      } else {
-        setUnits([]);
+        setUnits(data as Unit[]);
+        // If only one unit is available, select it automatically
+        if (data.length === 1 && !editingEmployee) {
+          setFormData(prev => ({ ...prev, unit_id: data[0].id }));
+        }
       }
     } catch (error) {
       console.error("Error fetching units:", error);
     }
   };
 
-  const fetchAccommodations = async () => {
+  const fetchStatuses = async () => {
     try {
-      const isSuper = currentUser?.is_super_user;
-      let unitIds: number[] = [];
-      if (!isSuper && currentUser?.id) {
-        const { data: links } = await supabase
-          .from("user_units")
-          .select("unit_id")
-          .eq("user_id", currentUser.id);
-        unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
-      }
-      const base = supabase
-        .from("accommodations")
-        .select("id, name, unit_id, is_active, created_at, updated_at")
-        .eq("is_active", true);
-      const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
-      if (!error && Array.isArray(data)) {
-        setAccommodations(data as Accommodation[]);
-      } else {
-        setAccommodations([]);
-      }
+      const { data } = await supabase.from("statuses").select("id, name").eq("is_active", true);
+      if (Array.isArray(data)) setStatuses(data as Status[]);
     } catch (error) {
-      console.error("Error fetching accommodations:", error);
+      console.error("Error fetching statuses:", error);
     }
   };
 
-  const fetchStatuses = async () => {
+  const fetchAccommodations = async () => {
     try {
-      const { data, error } = await supabase
-        .from("statuses")
-        .select("id, name, is_active, created_at, updated_at")
-        .eq("is_active", true);
-      if (!error && Array.isArray(data)) {
-        setStatuses(data as Status[]);
-      } else {
-        setStatuses([]);
-      }
+      const { data } = await supabase.from("accommodations").select("id, name, unit_id, bed_count").eq("is_active", true);
+      if (Array.isArray(data)) setAccommodations(data as Accommodation[]);
     } catch (error) {
-      console.error("Error fetching statuses:", error);
+      console.error("Error fetching accommodations:", error);
     }
   };
 
@@ -160,27 +208,31 @@ export default function Employees() {
     e.preventDefault();
 
     try {
+      // Find default status if creating
+      let statusId = formData.status_id;
+      if (!editingEmployee) {
+        const defaultStatus = statuses.find(s => s.name === "AGUARDANDO INTEGRAÇÃO");
+        if (defaultStatus) {
+          statusId = defaultStatus.id;
+        }
+      }
+
       const payload = {
         full_name: formData.full_name.toUpperCase(),
         arrival_date: formData.arrival_date || null,
         departure_date: formData.departure_date || null,
+        integration_date: formData.integration_date || null,
         observation: (formData.observation || "").toUpperCase(),
         unit_id: formData.unit_id,
         accommodation_id: formData.accommodation_id,
-        status_id: formData.status_id,
+        status_id: statusId,
+        function_id: formData.function_id,
       };
+
       if (editingEmployee) {
         const { error } = await supabase
           .from("employees")
-          .update({
-            full_name: payload.full_name,
-            arrival_date: payload.arrival_date,
-            departure_date: payload.departure_date,
-            observation: payload.observation,
-            unit_id: payload.unit_id,
-            accommodation_id: payload.accommodation_id,
-            status_id: payload.status_id,
-          })
+          .update(payload)
           .eq("id", editingEmployee.id);
         if (error) {
           showToast("Falha ao salvar funcionário", "error");
@@ -191,13 +243,7 @@ export default function Employees() {
         const { error } = await supabase
           .from("employees")
           .insert({
-            full_name: payload.full_name,
-            arrival_date: payload.arrival_date,
-            departure_date: payload.departure_date,
-            observation: payload.observation,
-            unit_id: payload.unit_id,
-            accommodation_id: payload.accommodation_id,
-            status_id: payload.status_id,
+            ...payload,
             is_active: true,
           });
         if (error) {
@@ -211,9 +257,46 @@ export default function Employees() {
       setEditingEmployee(null);
       resetFormData();
       fetchEmployees();
+      fetchOccupancy();
     } catch (error) {
       console.error("Error saving employee:", error);
       showToast("Falha ao salvar funcionário", "error");
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!approvingEmployee) return;
+
+    try {
+      const targetStatus = statuses.find(s => s.name === "TRABALHANDO DISPONIVEL");
+      if (!targetStatus) {
+        showToast("Status 'TRABALHANDO DISPONIVEL' não encontrado", "error");
+        return;
+      }
+
+      const payload = {
+        status_id: targetStatus.id,
+        integration_date: approveType === "INTEGRATING" ? (approveDate || null) : approvingEmployee.integration_date,
+      };
+
+      const { error } = await supabase
+        .from("employees")
+        .update(payload)
+        .eq("id", approvingEmployee.id);
+
+      if (error) {
+        showToast("Falha ao aprovar funcionário", "error");
+        return;
+      }
+
+      showToast("Funcionário aprovado com sucesso", "success");
+      setShowApproveModal(false);
+      setApprovingEmployee(null);
+      setApproveDate("");
+      fetchEmployees();
+    } catch (error) {
+      console.error("Error approving employee:", error);
+      showToast("Falha ao aprovar funcionário", "error");
     }
   };
 
@@ -231,6 +314,7 @@ export default function Employees() {
       }
       showToast("Funcionário desativado", "success");
       fetchEmployees();
+      fetchOccupancy();
     } catch (error) {
       console.error("Error deleting employee:", error);
       showToast("Falha ao desativar funcionário", "error");
@@ -238,14 +322,16 @@ export default function Employees() {
   };
 
   const resetFormData = () => {
+    const defaultStatus = statuses.find(s => s.name === "AGUARDANDO INTEGRAÇÃO");
     setFormData({
       full_name: "",
       arrival_date: "",
       departure_date: "",
+      integration_date: "",
       observation: "",
-      unit_id: units[0]?.id || 0,
+      unit_id: units.length === 1 ? units[0].id : 0,
       accommodation_id: null,
-      status_id: null,
+      status_id: defaultStatus?.id || null,
       function_id: null,
     });
   };
@@ -256,6 +342,7 @@ export default function Employees() {
       full_name: employee.full_name,
       arrival_date: employee.arrival_date || "",
       departure_date: employee.departure_date || "",
+      integration_date: employee.integration_date || "",
       observation: employee.observation || "",
       unit_id: employee.unit_id,
       accommodation_id: employee.accommodation_id,
@@ -263,6 +350,13 @@ export default function Employees() {
       function_id: employee.function_id,
     });
     setShowModal(true);
+  };
+
+  const openApproveModal = (employee: Employee) => {
+    setApprovingEmployee(employee);
+    setApproveType("INTEGRATING");
+    setApproveDate("");
+    setShowApproveModal(true);
   };
 
 
@@ -288,6 +382,9 @@ export default function Employees() {
         const getStatusName = (id: number | null) => statuses.find((s) => s.id === id)?.name || "";
         va = getStatusName(a.status_id);
         vb = getStatusName(b.status_id);
+      } else if (sortKey === "integration_date") {
+        va = a.integration_date || "";
+        vb = b.integration_date || "";
       }
       if (typeof va === "number" && typeof vb === "number") {
         return sortAsc ? va - vb : vb - va;
@@ -300,8 +397,6 @@ export default function Employees() {
     };
     return filtered.slice().sort(compare);
   })();
-
-
 
   if (isLoading) {
     return (
@@ -323,11 +418,10 @@ export default function Employees() {
       )}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Funcionários</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Integração</h1>
           <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
         <div className="w-full md:w-auto flex items-center gap-3">
-
           <button
             onClick={() => {
               setEditingEmployee(null);
@@ -337,7 +431,7 @@ export default function Employees() {
             className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
           >
             <Plus className="w-5 h-5" />
-            Novo Funcionário
+            Nova Integração
           </button>
         </div>
       </div>
@@ -366,6 +460,7 @@ export default function Employees() {
                   { key: "unit", label: "Unidade" },
                   { key: "accommodation", label: "Alojamento" },
                   { key: "status", label: "Status" },
+                  { key: "integration_date", label: "Data Integração" },
                 ].map((col) => (
                   <th key={col.key} className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
                     <button
@@ -420,8 +515,18 @@ export default function Employees() {
                   <td className="px-6 py-4 text-slate-300">
                     {statuses.find((s) => s.id === employee.status_id)?.name || "-"}
                   </td>
+                  <td className="px-6 py-4 text-slate-300 font-mono text-sm">
+                    {employee.integration_date ? new Date(employee.integration_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => openApproveModal(employee)}
+                        className="p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-all"
+                        title="Aprovar"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => openEditModal(employee)}
                         className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
@@ -446,60 +551,80 @@ export default function Employees() {
       {/* Mobile View */}
       <div className="md:hidden space-y-4">
         {displayedEmployees.map((employee) => (
-          <div key={employee.id} className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 shadow-xl">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-slate-800 rounded-lg">
-                  <UserCircle className="w-5 h-5 text-blue-400" />
+          <div key={employee.id} className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
+            {/* Header Section */}
+            <div className="p-4 border-b border-slate-700/50 bg-slate-800/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="p-2 bg-slate-800 rounded-lg shrink-0">
+                    <UserCircle className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-slate-100 font-semibold text-base truncate">{employee.full_name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs font-mono text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded">
+                        {employee.arrival_date ? new Date(employee.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-slate-200 font-medium text-sm">{employee.full_name}</h3>
-                  <p className="text-slate-400 text-xs font-mono">
-                    {employee.arrival_date ? new Date(employee.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => openEditModal(employee)}
-                  className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(employee.id)}
-                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/50">
+            {/* Content Section */}
+            <div className="p-4 grid grid-cols-2 gap-4">
               <div>
-                <p className="text-slate-400 text-xs">Função</p>
-                <p className="text-slate-200 text-sm">
+                <p className="text-slate-500 text-xs uppercase tracking-wider font-medium mb-1">Função</p>
+                <p className="text-slate-200 text-sm font-medium truncate">
                   {functions.find((f) => f.id === employee.function_id)?.name || "-"}
                 </p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Unidade</p>
-                <p className="text-slate-200 text-sm">
+                <p className="text-slate-500 text-xs uppercase tracking-wider font-medium mb-1">Unidade</p>
+                <p className="text-slate-200 text-sm font-medium truncate">
                   {units.find((u) => u.id === employee.unit_id)?.name || "-"}
                 </p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Alojamento</p>
-                <p className="text-slate-200 text-xs">
+                <p className="text-slate-500 text-xs uppercase tracking-wider font-medium mb-1">Alojamento</p>
+                <p className="text-slate-200 text-sm font-medium truncate">
                   {accommodations.find((a) => a.id === employee.accommodation_id)?.name || "-"}
                 </p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">Status</p>
-                <p className="text-slate-200 text-sm">
+                <p className="text-slate-500 text-xs uppercase tracking-wider font-medium mb-1">Status</p>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statuses.find((s) => s.id === employee.status_id)?.name === "TRABALHANDO DISPONIVEL"
+                  ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                  : "bg-slate-700/50 text-slate-300 border border-slate-600/50"
+                  }`}>
                   {statuses.find((s) => s.id === employee.status_id)?.name || "-"}
-                </p>
+                </span>
               </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div className="px-4 py-3 bg-slate-800/20 border-t border-slate-700/50 flex justify-end gap-2">
+              <button
+                onClick={() => openApproveModal(employee)}
+                className="flex-1 flex items-center justify-center gap-2 p-2 text-green-400 bg-green-500/5 hover:bg-green-500/10 border border-green-500/20 rounded-lg transition-all active:scale-95"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-xs font-medium">Aprovar</span>
+              </button>
+              <button
+                onClick={() => openEditModal(employee)}
+                className="flex-1 flex items-center justify-center gap-2 p-2 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 rounded-lg transition-all active:scale-95"
+              >
+                <Edit className="w-4 h-4" />
+                <span className="text-xs font-medium">Editar</span>
+              </button>
+              <button
+                onClick={() => handleDelete(employee.id)}
+                className="flex-1 flex items-center justify-center gap-2 p-2 text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-lg transition-all active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-xs font-medium">Excluir</span>
+              </button>
             </div>
           </div>
         ))}
@@ -510,7 +635,7 @@ export default function Employees() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-2xl shadow-2xl my-8">
             <h2 className="text-xl font-bold text-slate-100 mb-4">
-              {editingEmployee ? "Editar Funcionário" : "Novo Funcionário"}
+              {editingEmployee ? "Editar Funcionário" : "Nova Integração"}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
@@ -542,15 +667,16 @@ export default function Employees() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Data de Saída
+                    Data Integração
                   </label>
                   <input
                     type="date"
-                    value={formData.departure_date}
+                    value={formData.integration_date}
                     onChange={(e) =>
-                      setFormData({ ...formData, departure_date: e.target.value })
+                      setFormData({ ...formData, integration_date: e.target.value })
                     }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!editingEmployee}
                   />
                 </div>
               </div>
@@ -563,7 +689,7 @@ export default function Employees() {
                   <select
                     value={formData.unit_id || ""}
                     onChange={(e) =>
-                      setFormData({ ...formData, unit_id: parseInt(e.target.value) })
+                      setFormData({ ...formData, unit_id: parseInt(e.target.value), accommodation_id: null })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     required
@@ -614,11 +740,23 @@ export default function Employees() {
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   >
                     <option value="">Nenhum</option>
-                    {accommodations.map((accommodation) => (
-                      <option key={accommodation.id} value={accommodation.id}>
-                        {accommodation.name}
-                      </option>
-                    ))}
+                    {accommodations
+                      .filter(acc => {
+                        // Filter by unit
+                        if (formData.unit_id && acc.unit_id !== formData.unit_id) return false;
+
+                        // Filter by capacity (unless it's the currently selected one for this employee)
+                        const currentOccupancy = occupancy[acc.id] || 0;
+                        const isFull = currentOccupancy >= (acc.bed_count || 0);
+                        const isCurrentSelection = acc.id === formData.accommodation_id;
+
+                        return !isFull || isCurrentSelection;
+                      })
+                      .map((accommodation) => (
+                        <option key={accommodation.id} value={accommodation.id}>
+                          {accommodation.name} ({(occupancy[accommodation.id] || 0)}/{accommodation.bed_count || 0})
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
@@ -631,7 +769,8 @@ export default function Employees() {
                         status_id: e.target.value ? parseInt(e.target.value) : null,
                       })
                     }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50"
+                    disabled={!editingEmployee}
                   >
                     <option value="">Nenhum</option>
                     {statuses.map((status) => (
@@ -671,6 +810,72 @@ export default function Employees() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      {showApproveModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-slate-100 mb-4">Aprovar Funcionário</h2>
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="approveType"
+                    value="INTEGRATING"
+                    checked={approveType === "INTEGRATING"}
+                    onChange={() => setApproveType("INTEGRATING")}
+                    className="text-blue-500 focus:ring-blue-500"
+                  />
+                  INTEGRANDO
+                </label>
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="approveType"
+                    value="INTEGRATED"
+                    checked={approveType === "INTEGRATED"}
+                    onChange={() => setApproveType("INTEGRATED")}
+                    className="text-blue-500 focus:ring-blue-500"
+                  />
+                  JÁ INTEGRADO
+                </label>
+              </div>
+
+              {approveType === "INTEGRATING" && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Data Integração
+                  </label>
+                  <input
+                    type="date"
+                    value={approveDate}
+                    onChange={(e) => setApproveDate(e.target.value)}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowApproveModal(false)}
+                  className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
