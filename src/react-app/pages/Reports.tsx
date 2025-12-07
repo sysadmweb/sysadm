@@ -866,31 +866,64 @@ export default function Reports() {
             )}
 
             {/* Hidden Preview Area for HTML2Canvas */}
-            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className="w-[1200px] bg-white text-black p-8" ref={previewRef}>
+            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className={`${previewType === "cafe-da-manha" || previewType === "marmitas" ? "w-[1600px]" : "w-[1200px]"} bg-white text-black ${previewType === "cafe-da-manha" || previewType === "marmitas" ? "p-12" : "p-8"}`} ref={previewRef}>
                 {previewData && (
                     <div className="space-y-6">
-                        <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                            <img src="/logo.png" alt="Logo" className="w-20 h-20 object-contain" />
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900">
-                                    {previewType === "jornada" && "Relatório de Jornada"}
-                                    {previewType === "employees" && "Lista de Colaboradores"}
-                                    {previewType === "marmitas" && (
-                                        <div>
-                                            <div>Relatório de Marmitas</div>
-                                            {previewData.mealType && (
-                                                <div className="text-base font-bold text-black mt-1">
-                                                    {previewData.mealType === "almoco" ? "Almoço" : "Janta"}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
-                                    {previewType === "integration" && "Relatório de Integração"}
-                                </h1>
-                                <p className="text-gray-500">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                        {/* Header for non-marmitas reports */}
+                        {previewType !== "marmitas" && (
+                            <div className="flex items-center gap-4 mb-8 border-b pb-4">
+                                <img src="/logo.png" alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
+                                <div>
+                                    <h1 className={previewType === "cafe-da-manha" ? "text-4xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
+                                        {previewType === "jornada" && "Relatório de Jornada"}
+                                        {previewType === "employees" && "Lista de Colaboradores"}
+                                        {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
+                                        {previewType === "integration" && "Relatório de Integração"}
+                                    </h1>
+                                    <p className={previewType === "cafe-da-manha" ? "text-xl text-gray-500" : "text-gray-500"}>Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Marmitas Report (Custom Header + Table) */}
+                        {previewType === "marmitas" && (
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-4 mb-8 border-b pb-4">
+                                    <img src="/logo.png" alt="Logo" className="w-32 h-32 object-contain" />
+                                    <div>
+                                        <h1 className="text-4xl font-bold text-gray-900">
+                                            {previewData.mealType === "almoco" ? "Relatório de Almoço" : "Relatório de Janta"}
+                                        </h1>
+                                        <p className="text-xl text-gray-500">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                                    </div>
+                                </div>
+
+                                <table className="w-full text-xl border-collapse border-2 border-gray-400">
+                                    <thead>
+                                        <tr className="bg-blue-600 text-white">
+                                            <th className="p-6 border-2 border-gray-400 text-left text-2xl">Alojamento</th>
+                                            <th className="p-6 border-2 border-gray-400 text-2xl">
+                                                {previewData.mealType === "almoco" ? "Quantidade Almoço" : "Quantidade Janta"}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {previewData.accommodations.map((acc: any) => (
+                                            <tr key={acc.id} className="text-center">
+                                                <td className="p-6 border-2 border-gray-400 text-left text-xl">{acc.name}</td>
+                                                <td className="p-6 border-2 border-gray-400 text-xl">{previewData.employeeCounts[acc.id] || 0}</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="text-center font-bold bg-gray-100">
+                                            <td className="p-6 border-2 border-gray-400 text-left text-2xl">TOTAL</td>
+                                            <td className="p-6 border-2 border-gray-400 text-2xl">
+                                                {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
 
                         {previewType === "jornada" && (
                             <div className="space-y-8">
@@ -972,49 +1005,24 @@ export default function Reports() {
                             </div>
                         )}
 
-                        {previewType === "marmitas" && (
-                            <table className="w-full text-sm border-collapse border border-gray-300">
-                                <thead>
-                                    <tr className="bg-blue-600 text-white">
-                                        <th className="p-2 border border-gray-300 text-left">Alojamento</th>
-                                        <th className="p-2 border border-gray-300">Quantidade Marmitas</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {previewData.accommodations.map((acc: any) => (
-                                        <tr key={acc.id} className="text-center">
-                                            <td className="p-2 border border-gray-300 text-left">{acc.name}</td>
-                                            <td className="p-2 border border-gray-300">{previewData.employeeCounts[acc.id] || 0}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="text-center font-bold bg-gray-100">
-                                        <td className="p-2 border border-gray-300 text-left">TOTAL</td>
-                                        <td className="p-2 border border-gray-300">
-                                            {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        )}
-
                         {previewType === "cafe-da-manha" && (
-                            <table className="w-full text-sm border-collapse border border-gray-300">
+                            <table className="w-full text-xl border-collapse border-2 border-gray-400">
                                 <thead>
                                     <tr className="bg-blue-600 text-white">
-                                        <th className="p-2 border border-gray-300 text-left">Alojamento</th>
-                                        <th className="p-2 border border-gray-300">Quantidade Café da Manhã</th>
+                                        <th className="p-6 border-2 border-gray-400 text-left text-2xl">Alojamento</th>
+                                        <th className="p-6 border-2 border-gray-400 text-2xl">Quantidade Café da Manhã</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {previewData.accommodations.map((acc: any) => (
                                         <tr key={acc.id} className="text-center">
-                                            <td className="p-2 border border-gray-300 text-left">{acc.name}</td>
-                                            <td className="p-2 border border-gray-300">{previewData.employeeCounts[acc.id] || 0}</td>
+                                            <td className="p-6 border-2 border-gray-400 text-left text-xl">{acc.name}</td>
+                                            <td className="p-6 border-2 border-gray-400 text-xl">{previewData.employeeCounts[acc.id] || 0}</td>
                                         </tr>
                                     ))}
                                     <tr className="text-center font-bold bg-gray-100">
-                                        <td className="p-2 border border-gray-300 text-left">TOTAL</td>
-                                        <td className="p-2 border border-gray-300">
+                                        <td className="p-6 border-2 border-gray-400 text-left text-2xl">TOTAL</td>
+                                        <td className="p-6 border-2 border-gray-400 text-2xl">
                                             {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
                                         </td>
                                     </tr>
