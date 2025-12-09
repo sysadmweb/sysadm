@@ -244,7 +244,7 @@ export default function Reports() {
 
             doc.text(`Colaborador: ${employee?.full_name || "Desconhecido"}`, startX, currentY);
             currentY += lineHeight;
-            doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
+            doc.text(`Obra: ${unit?.name || '-'}`, startX, currentY);
             currentY += lineHeight;
             doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
 
@@ -327,6 +327,11 @@ export default function Reports() {
                 columnStyles: { 0: { halign: 'center' }, 1: { halign: 'left' }, 2: { halign: 'center' } },
             });
         });
+        doc.addPage();
+        doc.setFontSize(16);
+        doc.text("Resumo Geral", 14, 20);
+        doc.setFontSize(11);
+        doc.text(`Total de Colaboradores: ${employees.length}`, 14, 30);
         doc.save("lista_colaboradores.pdf");
     };
 
@@ -1002,6 +1007,11 @@ export default function Reports() {
                                         </div>
                                     );
                                 })}
+                                <div className="break-inside-avoid">
+                                    <div className="mt-4 bg-gray-100 p-3 rounded">
+                                        <p className="font-bold">TOTAL GERAL DE COLABORADORES: {previewData.employees.length}</p>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
