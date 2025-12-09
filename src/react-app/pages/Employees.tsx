@@ -770,10 +770,13 @@ export default function Employees() {
                       })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50"
-                    disabled={!editingEmployee}
+                    disabled={!!editingEmployee}
                   >
-                    <option value="">Nenhum</option>
-                    {statuses.map((status) => (
+                    {!editingEmployee && <option value="">Nenhum</option>}
+                    {(editingEmployee
+                      ? statuses.filter((s) => s.name === "AGUARDANDO INTEGRAÇÃO")
+                      : statuses
+                    ).map((status) => (
                       <option key={status.id} value={status.id}>
                         {status.name}
                       </option>

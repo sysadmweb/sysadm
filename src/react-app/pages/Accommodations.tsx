@@ -22,6 +22,11 @@ export default function Accommodations() {
     bed_count: "",
   });
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [showEmployeesModal, setShowEmployeesModal] = useState(false);
+  const [employeesForAccommodation, setEmployeesForAccommodation] = useState<{ id: number; full_name: string }[]>([]);
+  const [selectedAccommodationForEmployees, setSelectedAccommodationForEmployees] = useState<Accommodation | null>(null);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+  const [employeeMarks, setEmployeeMarks] = useState<Record<number, number>>({});
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -175,6 +180,32 @@ export default function Accommodations() {
     setShowModal(true);
   };
 
+  const openEmployeesModal = async (accommodation: Accommodation) => {
+    try {
+      setIsLoadingEmployees(true);
+      setSelectedAccommodationForEmployees(accommodation);
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, full_name")
+        .eq("is_active", true)
+        .eq("accommodation_id", accommodation.id)
+        .order("full_name");
+      if (error) {
+        showToast("Falha ao carregar colaboradores", "error");
+        setEmployeesForAccommodation([]);
+      } else {
+        setEmployeesForAccommodation(Array.isArray(data) ? (data as { id: number; full_name: string }[]) : []);
+      }
+      setEmployeeMarks({});
+      setShowEmployeesModal(true);
+    } catch (error) {
+      console.error("Error fetching employees for accommodation:", error);
+      showToast("Erro ao carregar colaboradores", "error");
+    } finally {
+      setIsLoadingEmployees(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -229,7 +260,11 @@ export default function Accommodations() {
           </thead>
           <tbody className="divide-y divide-slate-700/50">
             {accommodations.map((accommodation) => (
-              <tr key={accommodation.id} className="hover:bg-slate-800/30 transition-colors">
+              <tr
+                key={accommodation.id}
+                onClick={() => openEmployeesModal(accommodation)}
+                className="hover:bg-slate-800/30 transition-colors cursor-pointer"
+              >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
                     <Home className="w-5 h-5 text-green-400" />
@@ -251,13 +286,13 @@ export default function Accommodations() {
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
                     <button
-                      onClick={() => openEditModal(accommodation)}
+                      onClick={(e) => { e.stopPropagation(); openEditModal(accommodation); }}
                       className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(accommodation.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(accommodation.id); }}
                       className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -273,7 +308,12 @@ export default function Accommodations() {
       {/* Mobile View */}
       <div className="md:hidden space-y-4">
         {accommodations.map((accommodation) => (
-          <div key={accommodation.id} className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 shadow-xl">
+          <div
+            key={accommodation.id}
+            onClick={() => openEmployeesModal(accommodation)}
+            className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 shadow-xl cursor-pointer hover:bg-slate-800/40 transition-colors"
+            style={{ touchAction: 'manipulation' }}
+          >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-800 rounded-lg">
@@ -294,13 +334,13 @@ export default function Accommodations() {
               </div>
               <div className="flex gap-1">
                 <button
-                  onClick={() => openEditModal(accommodation)}
+                  onClick={(e) => { e.stopPropagation(); openEditModal(accommodation); }}
                   className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-all"
                 >
                   <Edit className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(accommodation.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(accommodation.id); }}
                   className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -387,6 +427,46 @@ export default function Accommodations() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {showEmployeesModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-slate-100 mb-2">Colaboradores</h2>
+            <p className="text-slate-400 text-sm mb-4">Alojamento: {selectedAccommodationForEmployees?.name || "-"}</p>
+            {isLoadingEmployees ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+              </div>
+            ) : employeesForAccommodation.length === 0 ? (
+              <div className="text-slate-400 text-center py-6">Nenhum colaborador vinculado</div>
+            ) : (
+              <ul className="space-y-2 max-h-64 overflow-y-auto">
+                {employeesForAccommodation.map((emp) => (
+                  <li
+                    key={emp.id}
+                    onClick={() => setEmployeeMarks(prev => ({ ...prev, [emp.id]: ((prev[emp.id] ?? 0) + 1) % 3 }))}
+                    className={`px-3 py-2 rounded border text-sm cursor-pointer select-none transition-colors ${employeeMarks[emp.id] === 1
+                      ? "bg-green-500/5 border-green-500/30 text-green-400"
+                      : employeeMarks[emp.id] === 2
+                        ? "bg-red-500/5 border-red-500/30 text-red-400"
+                        : "bg-slate-800 border-slate-700 text-slate-200"}`}
+                  >
+                    {emp.full_name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => { setShowEmployeesModal(false); setEmployeeMarks({}); }}
+                className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
