@@ -135,6 +135,7 @@ export default function Dashboard() {
     {
       label: "Vagas Ocupadas",
       value: `${stats?.occupied_beds || 0}/${stats?.total_beds || 0}`,
+      subtext: `Vagas Disponíveis : ${stats?.available_beds || 0}`,
       icon: TagIcon,
       color: "from-purple-500 to-blue-500",
       bgColor: "bg-purple-500/10",
@@ -180,6 +181,12 @@ export default function Dashboard() {
             <div className="space-y-1">
               <p className="text-2xl md:text-3xl font-bold text-slate-100">{card.value}</p>
               <p className="text-xs sm:text-sm text-slate-400">{card.label}</p>
+              {"subtext" in card && (
+                <p className="text-[10px] text-slate-500 mt-1 font-medium bg-slate-800/50 inline-block px-1.5 py-0.5 rounded">
+                  {/* @ts-ignore */}
+                  {card.subtext}
+                </p>
+              )}
             </div>
           </div>
         ))}

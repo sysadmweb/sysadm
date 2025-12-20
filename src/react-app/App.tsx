@@ -23,6 +23,8 @@ import ReportsPage from "@/react-app/pages/Reports";
 import StockMovementPage from "@/react-app/pages/StockMovement";
 import ProductMovementPage from "@/react-app/pages/ProductMovement";
 import CleanersPage from "@/react-app/pages/Cleaners";
+import MealsPage from "@/react-app/pages/Meals";
+import AbastecimentoPage from "@/react-app/pages/Abastecimento";
 import Layout from "@/react-app/components/Layout";
 import ProtectedRoute from "@/react-app/components/ProtectedRoute";
 
@@ -63,6 +65,8 @@ export default function App() {
                         <Route path="stock/movement" element={<StockMovementPage />} />
                         <Route path="stock/product-movement" element={<ProductMovementPage />} />
                         <Route path="cleaners" element={<CleanersPage />} />
+                        <Route path="meals" element={<MealsPage />} />
+                        <Route path="abastecimento" element={<AbastecimentoPage />} />
                     </Route>
                 </Routes>
             </Router>

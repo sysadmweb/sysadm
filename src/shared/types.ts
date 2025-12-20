@@ -153,7 +153,10 @@ export const EmployeeSchema = z.object({
   unit_id: z.number(),
   accommodation_id: z.number().nullable(),
   status_id: z.number().nullable(),
+  refeicao_status_id: z.number().nullable().optional(),
   function_id: z.number().nullable(),
+  transferred_to_unit_id: z.number().nullable().optional(),
+  transferred_arrival_date: z.string().nullable().optional(),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -180,7 +183,10 @@ export const UpdateEmployeeSchema = z.object({
   unit_id: z.number().optional(),
   accommodation_id: z.number().nullable().optional(),
   status_id: z.number().nullable().optional(),
+  refeicao_status_id: z.number().nullable().optional(),
   function_id: z.number().nullable().optional(),
+  transferred_to_unit_id: z.number().nullable().optional(),
+  transferred_arrival_date: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -365,3 +371,55 @@ export const CreateInspectionPhotoSchema = z.object({
 
 export type InspectionPhoto = z.infer<typeof InspectionPhotoSchema>;
 export type CreateInspectionPhotoInput = z.infer<typeof CreateInspectionPhotoSchema>;
+
+// Fuel Supply schemas
+export const FuelSupplySchema = z.object({
+  id: z.number(),
+  supply_date: z.string(),
+  km_photo_url: z.string(),
+  plate_photo_url: z.string(),
+  receipt_photo_url: z.string(),
+  unit_id: z.number(),
+  user_id: z.number().nullable(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateFuelSupplySchema = z.object({
+  supply_date: z.string(),
+  km_photo_url: z.string(),
+  plate_photo_url: z.string(),
+  receipt_photo_url: z.string(),
+  unit_id: z.number(),
+});
+
+export type FuelSupply = z.infer<typeof FuelSupplySchema>;
+export type CreateFuelSupplyInput = z.infer<typeof CreateFuelSupplySchema>;
+
+// Mega Settings schemas
+export const MegaSettingsSchema = z.object({
+  id: z.number(),
+  mega_email: z.string().email(),
+  mega_password: z.string().min(1),
+  root_folder_name: z.string().min(1),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateMegaSettingsSchema = z.object({
+  mega_email: z.string().email(),
+  mega_password: z.string().min(1),
+  root_folder_name: z.string().min(1),
+});
+
+export const UpdateMegaSettingsSchema = z.object({
+  mega_email: z.string().email().optional(),
+  mega_password: z.string().min(1).optional(),
+  root_folder_name: z.string().min(1).optional(),
+});
+
+export type MegaSettings = z.infer<typeof MegaSettingsSchema>;
+export type CreateMegaSettingsInput = z.infer<typeof CreateMegaSettingsSchema>;
+export type UpdateMegaSettingsInput = z.infer<typeof UpdateMegaSettingsSchema>;

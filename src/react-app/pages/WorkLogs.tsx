@@ -18,6 +18,7 @@ type WorkLog = {
     exit_time_1: string | null;
     entry_time_2: string | null;
     exit_time_2: string | null;
+    observation: string | null; // Added
     created_at: string;
 };
 
@@ -37,6 +38,7 @@ export default function WorkLogs() {
         exit_time_1: "",
         entry_time_2: "",
         exit_time_2: "",
+        observation: "", // Added
     });
 
     const showToast = (text: string, kind: "success" | "error") => {
@@ -85,6 +87,7 @@ export default function WorkLogs() {
                 exit_time_1: formData.exit_time_1 || null,
                 entry_time_2: formData.entry_time_2 || null,
                 exit_time_2: formData.exit_time_2 || null,
+                observation: formData.observation || null, // Added
             };
 
             if (editingLog) {
@@ -134,6 +137,7 @@ export default function WorkLogs() {
             exit_time_1: "",
             entry_time_2: "",
             exit_time_2: "",
+            observation: "",
         });
         setEditingLog(null);
     };
@@ -147,6 +151,7 @@ export default function WorkLogs() {
             exit_time_1: log.exit_time_1 || "",
             entry_time_2: log.entry_time_2 || "",
             exit_time_2: log.exit_time_2 || "",
+            observation: log.observation || "", // Added
         });
         setShowModal(true);
     };
@@ -391,6 +396,16 @@ export default function WorkLogs() {
                                         className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                                     />
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Observação</label>
+                                <textarea
+                                    value={formData.observation}
+                                    onChange={e => setFormData({ ...formData, observation: e.target.value })}
+                                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none h-24"
+                                    placeholder="Adicione uma observação (opcional)..."
+                                />
                             </div>
 
                             <div className="flex gap-3 pt-4">

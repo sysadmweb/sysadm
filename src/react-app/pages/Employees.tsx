@@ -11,7 +11,9 @@ import {
   Loader2,
   UserCircle,
   CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
+
 import { Employee, Unit, Status, Function, Accommodation } from "../../shared/types";
 
 export default function Employees() {
@@ -40,6 +42,15 @@ export default function Employees() {
     status_id: null as number | null,
     function_id: null as number | null,
   });
+
+  // Validation state
+  const [validationError, setValidationError] = useState<{ message: string } | null>(null);
+  const [highlightedFields, setHighlightedFields] = useState<string[]>([]);
+
+  // Helper to clear highlight
+  const clearHighlight = (field: string) => {
+    setHighlightedFields(prev => prev.filter(f => f !== field));
+  };
 
   // Approve Modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -87,6 +98,7 @@ export default function Employees() {
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
+
       // Get status ID for "AGUARDANDO INTEGRAÇÃO"
       const { data: statusData } = await supabase
         .from("statuses")
@@ -106,7 +118,7 @@ export default function Employees() {
           "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
-        .eq("status_id", statusData.id); // Filter by status
+        .eq("status_id", statusData.id);
 
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
       if (!error && Array.isArray(data)) {
@@ -207,6 +219,25 @@ export default function Employees() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation (with Alert Modal)
+    if (!formData.function_id) {
+      setValidationError({ message: "A função é obrigatória" });
+      setHighlightedFields((prev) => [...new Set([...prev, "function_id"])]);
+      return;
+    }
+
+    if (formData.arrival_date && !formData.accommodation_id) {
+      setValidationError({ message: "Ao informar a Data de Chegada, o Alojamento é obrigatório" });
+      setHighlightedFields((prev) => [...new Set([...prev, "accommodation_id"])]);
+      return;
+    }
+
+    if (formData.accommodation_id && !formData.arrival_date) {
+      setValidationError({ message: "Ao informar o Alojamento, a Data de Chegada é obrigatória" });
+      setHighlightedFields((prev) => [...new Set([...prev, "arrival_date"])]);
+      return;
+    }
+
     try {
       // Find default status if creating
       let statusId = formData.status_id;
@@ -274,9 +305,16 @@ export default function Employees() {
         return;
       }
 
+      const { data: mealStatusData } = await supabase
+        .from("meal_statuses")
+        .select("id")
+        .eq("name", "OBRA")
+        .single();
+
       const payload = {
         status_id: targetStatus.id,
         integration_date: approveType === "INTEGRATING" ? (approveDate || null) : approvingEmployee.integration_date,
+        refeicao_status_id: mealStatusData?.id || null,
       };
 
       const { error } = await supabase
@@ -337,6 +375,7 @@ export default function Employees() {
   };
 
   const openEditModal = (employee: Employee) => {
+    setHighlightedFields([]); // Clear any previous highlights
     setEditingEmployee(employee);
     setFormData({
       full_name: employee.full_name,
@@ -353,11 +392,18 @@ export default function Employees() {
   };
 
   const openApproveModal = (employee: Employee) => {
+    if (!employee.arrival_date) {
+      openEditModal(employee);
+      setValidationError({ message: "Preencher data de Chegada" });
+      setHighlightedFields((prev) => [...new Set([...prev, "arrival_date"])]);
+      return;
+    }
     setApprovingEmployee(employee);
     setApproveType("INTEGRATING");
     setApproveDate("");
     setShowApproveModal(true);
   };
+
 
 
 
@@ -426,6 +472,7 @@ export default function Employees() {
             onClick={() => {
               setEditingEmployee(null);
               resetFormData();
+              setHighlightedFields([]);
               setShowModal(true);
             }}
             className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
@@ -447,6 +494,7 @@ export default function Employees() {
         />
       </div>
 
+
       {/* Desktop View */}
       <div className="hidden md:block bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
@@ -460,7 +508,6 @@ export default function Employees() {
                   { key: "unit", label: "Unidade" },
                   { key: "accommodation", label: "Alojamento" },
                   { key: "status", label: "Status" },
-                  { key: "integration_date", label: "Data Integração" },
                 ].map((col) => (
                   <th key={col.key} className="px-6 py-4 text-center text-sm font-semibold text-slate-300">
                     <button
@@ -514,9 +561,6 @@ export default function Employees() {
                   </td>
                   <td className="px-6 py-4 text-slate-300">
                     {statuses.find((s) => s.id === employee.status_id)?.name || "-"}
-                  </td>
-                  <td className="px-6 py-4 text-slate-300 font-mono text-sm">
-                    {employee.integration_date ? new Date(employee.integration_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2">
@@ -661,8 +705,11 @@ export default function Employees() {
                   <input
                     type="date"
                     value={formData.arrival_date}
-                    onChange={(e) => setFormData({ ...formData, arrival_date: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    onChange={(e) => {
+                      setFormData({ ...formData, arrival_date: e.target.value });
+                      clearHighlight("arrival_date");
+                    }}
+                    className={`w-full px-4 py-2 bg-slate-800 border rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${highlightedFields.includes("arrival_date") ? "border-red-500 ring-1 ring-red-500" : "border-slate-700"}`}
                   />
                 </div>
                 <div>
@@ -676,7 +723,7 @@ export default function Employees() {
                       setFormData({ ...formData, integration_date: e.target.value })
                     }
                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!editingEmployee}
+                    disabled={true}
                   />
                 </div>
               </div>
@@ -706,13 +753,14 @@ export default function Employees() {
                   <label className="block text-sm font-medium text-slate-300 mb-2">Função</label>
                   <select
                     value={formData.function_id || ""}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setFormData({
                         ...formData,
                         function_id: e.target.value ? parseInt(e.target.value) : null,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      });
+                      clearHighlight("function_id");
+                    }}
+                    className={`w-full px-4 py-2 bg-slate-800 border rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${highlightedFields.includes("function_id") ? "border-red-500 ring-1 ring-red-500" : "border-slate-700"}`}
                   >
                     <option value="">Nenhuma</option>
                     {functions.map((func) => (
@@ -731,13 +779,14 @@ export default function Employees() {
                   </label>
                   <select
                     value={formData.accommodation_id || ""}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setFormData({
                         ...formData,
                         accommodation_id: e.target.value ? parseInt(e.target.value) : null,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      });
+                      clearHighlight("accommodation_id");
+                    }}
+                    className={`w-full px-4 py-2 bg-slate-800 border rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${highlightedFields.includes("accommodation_id") ? "border-red-500 ring-1 ring-red-500" : "border-slate-700"}`}
                   >
                     <option value="">Nenhum</option>
                     {accommodations
@@ -769,18 +818,16 @@ export default function Employees() {
                         status_id: e.target.value ? parseInt(e.target.value) : null,
                       })
                     }
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50"
-                    disabled={!!editingEmployee}
+                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={true}
                   >
-                    {!editingEmployee && <option value="">Nenhum</option>}
-                    {(editingEmployee
-                      ? statuses.filter((s) => s.name === "AGUARDANDO INTEGRAÇÃO")
-                      : statuses
-                    ).map((status) => (
-                      <option key={status.id} value={status.id}>
-                        {status.name}
-                      </option>
-                    ))}
+                    {statuses
+                      .filter((s) => s.name === "AGUARDANDO INTEGRAÇÃO")
+                      .map((status) => (
+                        <option key={status.id} value={status.id}>
+                          {status.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -879,6 +926,24 @@ export default function Employees() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Alert Modal */}
+      {validationError && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-red-500/50 p-6 rounded-xl shadow-2xl w-full max-w-sm text-center relative animate-in fade-in zoom-in duration-300">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 mb-4">
+              <AlertTriangle className="h-10 w-10 text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-100 mb-2">Atenção Necessária</h3>
+            <p className="text-slate-300 mb-6">{validationError.message}</p>
+            <button
+              onClick={() => setValidationError(null)}
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
+            >
+              OK, Entendi
+            </button>
           </div>
         </div>
       )}

@@ -22,6 +22,8 @@ import {
     Tag,
     Activity,
     Package,
+    Utensils,
+    Fuel
 } from "lucide-react";
 
 export default function Layout() {
@@ -86,6 +88,8 @@ export default function Layout() {
         { path: "/inspection", icon: ClipboardCheck, label: "Vistorias", key: "inspection" },
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
+        { path: "/meals", icon: Utensils, label: "Refeição", key: "meals" },
+        { path: "/abastecimento", icon: Fuel, label: "Abastecimento", key: "fuel_supply" },
         {
             path: "/purchases",
             icon: ShoppingCart,
