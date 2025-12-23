@@ -19,7 +19,7 @@ type WorkLog = {
     created_at: string;
 };
 
-export default function Reports() {
+export default function Relatorios() {
     const { user: currentUser } = useAuth();
     const [loadingReport, setLoadingReport] = useState<string | null>(null);
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
@@ -173,7 +173,54 @@ export default function Reports() {
     };
 
     const fetchCafeDaManhaData = async () => {
-        return await fetchMarmitasData();
+        const { isSuper, unitIds } = await fetchUserUnits();
+
+        // Fetch status IDs for "AGUARDANDO INTEGRAÇÃO" and "TRABALHANDO DISPONÍVEL"
+        const [aguardandoRes, trabalhandoRes] = await Promise.all([
+            supabase.from("statuses").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("statuses").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
+        ]);
+
+        const aguardandoId = aguardandoRes.data?.id;
+        const trabalhandoId = trabalhandoRes.data?.id;
+        const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
+
+        if (statusIds.length === 0) {
+            throw new Error("Required statuses not found");
+        }
+
+        // Fetch employees with the specified statuses and accommodation
+        const [accRes, empRes] = await Promise.all([
+            supabase.from("accommodations").select("*").eq("is_active", true),
+            supabase.from("employees")
+                .select("accommodation_id, status_id")
+                .eq("is_active", true)
+                .not("accommodation_id", "is", null)
+                .in("status_id", statusIds)
+        ]);
+
+        if (accRes.error) throw accRes.error;
+        if (empRes.error) throw empRes.error;
+
+        let accommodations = accRes.data as Accommodation[] || [];
+        const employees = empRes.data as { accommodation_id: number, status_id: number }[] || [];
+
+        if (!isSuper && unitIds.length > 0) {
+            accommodations = accommodations.filter(a => unitIds.includes(a.unit_id));
+        } else if (!isSuper && unitIds.length === 0) {
+            accommodations = [];
+        }
+
+        const employeeCounts: Record<number, number> = {};
+        employees.forEach(emp => {
+            if (emp.accommodation_id) {
+                employeeCounts[emp.accommodation_id] = (employeeCounts[emp.accommodation_id] || 0) + 1;
+            }
+        });
+
+        const accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
+
+        return { accommodations: accommodationsWithEmployees, employeeCounts };
     };
 
     const fetchDDSData = async (mode: "todos" | "obra") => {

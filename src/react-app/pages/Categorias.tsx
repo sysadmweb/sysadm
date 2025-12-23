@@ -10,7 +10,7 @@ interface Category {
     updated_at: string;
 }
 
-export default function Categories() {
+export default function Categorias() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);

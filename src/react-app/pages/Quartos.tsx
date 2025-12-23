@@ -4,7 +4,7 @@ import { Plus, Edit, Trash2, Loader2, Bed } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
-export default function Rooms() {
+export default function Quartos() {
   const { user: currentUser } = useAuth();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);

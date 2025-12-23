@@ -5,7 +5,7 @@ import { Shield, User as UserIcon, ArrowLeft } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import * as bcrypt from "bcryptjs";
 
-export default function RegisterUser() {
+export default function CadastrarUsuario() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,7 +17,7 @@ export default function RegisterUser() {
     is_super_user: false,
   });
 
-  useEffect(() => {}, []);
+  useEffect(() => { }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -10,7 +10,7 @@ interface Status {
     updated_at: string;
 }
 
-export default function StatusPage() {
+export default function StatusFuncionarios() {
     const [statuses, setStatuses] = useState<Status[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);

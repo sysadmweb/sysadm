@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
-export default function PurchasesView() {
+export default function VisualizarNotas() {
     const navigate = useNavigate();
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [isLoading, setIsLoading] = useState(true);

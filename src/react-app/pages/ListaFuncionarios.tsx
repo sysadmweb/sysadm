@@ -47,7 +47,7 @@ interface Accommodation {
     unit_id: number;
 }
 
-export default function EmployeeList() {
+export default function ListaFuncionarios() {
     const { user: currentUser, isLoading: authLoading } = useAuth();
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [units, setUnits] = useState<Unit[]>([]);

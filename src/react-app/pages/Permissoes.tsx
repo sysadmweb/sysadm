@@ -22,7 +22,7 @@ type UserPermission = {
   is_active: boolean;
 };
 
-export default function Permissions() {
+export default function Permissoes() {
   const { user } = useAuth();
   const [users, setUsers] = useState<SimpleUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);

@@ -4,7 +4,7 @@ import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Unit, Function } from "@/shared/types";
 import { Users, CalendarClock, Loader2, Search, CheckSquare, X } from "lucide-react";
 
-export default function Transfer() {
+export default function Transferencia() {
   const { user: currentUser } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -98,36 +98,52 @@ export default function Transfer() {
 
   const fetchTransferHistory = async () => {
     try {
-      const [{ data: statuses }, { data: employeesData }, { data: unitsData }] = await Promise.all([
-        supabase.from("statuses").select("id, name").eq("is_active", true),
-        supabase
-          .from("employees")
-          .select("id, full_name, unit_id, departure_date, status_id, observation")
-          .eq("is_active", true)
-          .order("departure_date", { ascending: false }),
-        supabase.from("units").select("id, name").eq("is_active", true),
-      ]);
+      // First, get all statuses that start with "TRANSFERIDO PARA"
+      const { data: statuses } = await supabase
+        .from("statuses")
+        .select("id, name")
+        .eq("is_active", true)
+        .ilike("name", "TRANSFERIDO PARA%");
 
+      if (!statuses || statuses.length === 0) {
+        setDbTransferLogs([]);
+        return;
+      }
+
+      const transferStatusIds = statuses.map((s: any) => s.id);
       const statusMap = new Map<number, string>();
-      (statuses || []).forEach((s: any) => statusMap.set(s.id, s.name));
+      statuses.forEach((s: any) => statusMap.set(s.id, s.name));
+
+      // Fetch employees with transfer status and departure_date
+      const { data: employeesData } = await supabase
+        .from("employees")
+        .select("id, full_name, unit_id, departure_date, status_id, observation, transferred_to_unit_id")
+        .eq("is_active", true)
+        .in("status_id", transferStatusIds)
+        .not("departure_date", "is", null)
+        .order("departure_date", { ascending: false });
+
+      const { data: unitsData } = await supabase
+        .from("units")
+        .select("id, name")
+        .eq("is_active", true);
+
       const unitMap = new Map<number, string>();
       (unitsData || []).forEach((u: any) => unitMap.set(u.id, u.name));
 
-      const logs: TransferLog[] = (employeesData || [])
-        .filter((e: any) => {
-          const name = statusMap.get(e.status_id) || "";
-          return name.startsWith("TRANSFERIDO PARA");
-        })
-        .map((e: any) => {
-          const toStatus = statusMap.get(e.status_id) || "";
-          const toUnit = toStatus.replace(/^TRANSFERIDO PARA\s*/, "");
-          const obs: string = e.observation || "";
-          let fromUnit = unitMap.get(e.unit_id) || "-";
-          const m = obs.match(/DE\s+(.+?)\s+PARA\s+(.+?)(\s|$)/i);
-          if (m && m[1]) fromUnit = m[1];
-          const dt = e.departure_date ? new Date(e.departure_date).toLocaleString("pt-BR", { timeZone: "UTC" }) : "-";
-          return { id: e.id, name: e.full_name, fromUnit, toUnit, dateTime: dt, observation: obs };
-        });
+      const logs: TransferLog[] = (employeesData || []).map((e: any) => {
+        const toStatus = statusMap.get(e.status_id) || "";
+        const toUnit = toStatus.replace(/^TRANSFERIDO PARA\s*/, "");
+        const obs: string = e.observation || "";
+        let fromUnit = unitMap.get(e.unit_id) || "-";
+
+        // Try to extract fromUnit from observation
+        const m = obs.match(/DE\s+(.+?)\s+PARA\s+(.+?)(\s|$)/i);
+        if (m && m[1]) fromUnit = m[1];
+
+        const dt = e.departure_date ? new Date(e.departure_date).toLocaleString("pt-BR", { timeZone: "UTC" }) : "-";
+        return { id: e.id, name: e.full_name, fromUnit, toUnit, dateTime: dt, observation: obs };
+      });
 
       setDbTransferLogs(logs);
     } catch (error) {

@@ -11,7 +11,7 @@ const formatDate = (dateString: string) => {
     return `${day}/${month}/${year}`;
 };
 
-export default function AbastecimentoPage() {
+export default function Abastecimento() {
     const { user } = useAuth();
     const [supplies, setSupplies] = useState<FuelSupply[]>([]);
     const [isLoading, setIsLoading] = useState(true);

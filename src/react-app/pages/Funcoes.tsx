@@ -3,7 +3,7 @@ import { Function } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Briefcase } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 
-export default function Functions() {
+export default function Funcoes() {
   const [functions, setFunctions] = useState<Function[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);

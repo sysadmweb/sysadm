@@ -5,7 +5,7 @@ import { useAuth } from "@/react-app/contexts/AuthContext";
 import * as bcrypt from "bcryptjs";
 import { supabase } from "@/react-app/supabase";
 
-export default function Users() {
+export default function Usuarios() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);

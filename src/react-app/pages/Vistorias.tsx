@@ -30,7 +30,7 @@ type User = {
     name: string;
 };
 
-export default function Inspection() {
+export default function Vistorias() {
     const { user: currentUser } = useAuth();
     const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
     const [inspectedAccommodationIds, setInspectedAccommodationIds] = useState<number[]>([]);

@@ -16,7 +16,7 @@ type Cleaner = {
     is_active: boolean;
 };
 
-export default function Cleaners() {
+export default function Faxineiras() {
     const { user: currentUser } = useAuth();
     const [cleaners, setCleaners] = useState<Cleaner[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -192,8 +192,8 @@ export default function Cleaners() {
             {toast && (
                 <div
                     className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 ${toast.kind === "success"
-                            ? "bg-green-500/10 border border-green-500/50 text-green-400"
-                            : "bg-red-500/10 border border-red-500/50 text-red-400"
+                        ? "bg-green-500/10 border border-green-500/50 text-green-400"
+                        : "bg-red-500/10 border border-red-500/50 text-red-400"
                         }`}
                 >
                     {toast.text}

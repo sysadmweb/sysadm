@@ -4,7 +4,7 @@ import { Plus, Edit, Trash2, Loader2, Building2, UserCheck } from "lucide-react"
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
-export default function Units() {
+export default function Unidades() {
   const { user: currentUser } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -168,9 +168,8 @@ export default function Units() {
     <div className="space-y-6">
       {toast && (
         <div
-          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
-            toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
-          }`}
+          className={`fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg ${toast.kind === "success" ? "bg-green-500/10 border border-green-500/50 text-green-400" : "bg-red-500/10 border border-red-500/50 text-red-400"
+            }`}
         >
           {toast.text}
         </div>
@@ -232,8 +231,8 @@ export default function Units() {
         ))}
       </div>
 
-  {/* Modal */}
-  {showModal && (
+      {/* Modal */}
+      {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-slate-100 mb-4">
@@ -273,50 +272,50 @@ export default function Units() {
                 </button>
               </div>
             </form>
-      </div>
-    </div>
-  )}
+          </div>
+        </div>
+      )}
 
-  {assignModalUnit && (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
-        <h2 className="text-xl font-bold text-slate-100 mb-4">Usuários da Unidade</h2>
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          {commonUsers.map((u) => (
-            <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800/50">
-              <input
-                type="checkbox"
-                checked={selectedUserIds.includes(u.id)}
-                onChange={() => toggleUserAssign(u.id)}
-              />
-              <span className="text-slate-200">{u.name}</span>
-              <span className="text-slate-500 text-xs">({u.username})</span>
-            </label>
-          ))}
-          {commonUsers.length === 0 && (
-            <div className="text-slate-400 text-sm">Nenhum usuário comum encontrado</div>
-          )}
+      {assignModalUnit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-bold text-slate-100 mb-4">Usuários da Unidade</h2>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {commonUsers.map((u) => (
+                <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded hover:bg-slate-800/50">
+                  <input
+                    type="checkbox"
+                    checked={selectedUserIds.includes(u.id)}
+                    onChange={() => toggleUserAssign(u.id)}
+                  />
+                  <span className="text-slate-200">{u.name}</span>
+                  <span className="text-slate-500 text-xs">({u.username})</span>
+                </label>
+              ))}
+              {commonUsers.length === 0 && (
+                <div className="text-slate-400 text-sm">Nenhum usuário comum encontrado</div>
+              )}
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setAssignModalUnit(null)}
+                className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveAssignments}
+                disabled={isSavingAssign}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-60"
+              >
+                {isSavingAssign ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-3 pt-4">
-          <button
-            type="button"
-            onClick={() => setAssignModalUnit(null)}
-            className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={saveAssignments}
-            disabled={isSavingAssign}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-60"
-          >
-            {isSavingAssign ? "Salvando..." : "Salvar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
+      )}
     </div>
   );
 }

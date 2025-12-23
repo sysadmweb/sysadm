@@ -20,7 +20,7 @@ interface Category {
     name: string;
 }
 
-export default function ManualPurchases() {
+export default function LancamentoAvulso() {
     const [purchases, setPurchases] = useState<ManualPurchase[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);

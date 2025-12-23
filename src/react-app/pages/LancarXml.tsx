@@ -24,7 +24,7 @@ interface ParsedInvoice {
     items: ParsedItem[];
 }
 
-export default function PurchasesXml() {
+export default function LancarXml() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const editId = searchParams.get("id");

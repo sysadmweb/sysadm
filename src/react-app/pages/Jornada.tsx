@@ -22,7 +22,7 @@ type WorkLog = {
     created_at: string;
 };
 
-export default function WorkLogs() {
+export default function Jornada() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);

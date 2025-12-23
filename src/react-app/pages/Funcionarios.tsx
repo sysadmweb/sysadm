@@ -16,7 +16,7 @@ import {
 
 import { Employee, Unit, Status, Function, Accommodation } from "../../shared/types";
 
-export default function Employees() {
+export default function Funcionarios() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);

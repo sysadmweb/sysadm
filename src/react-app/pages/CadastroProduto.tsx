@@ -3,7 +3,7 @@ import { supabase } from "@/react-app/supabase";
 import { Product } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Package, ChevronUp, ChevronDown, Search } from "lucide-react";
 
-export default function StockMovement() {
+export default function CadastroProduto() {
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);

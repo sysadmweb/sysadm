@@ -105,7 +105,7 @@ function WorkDaysCalendar() {
   );
 }
 
-export default function Meals() {
+export default function Refeicoes() {
   const { user: currentUser } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -257,8 +257,8 @@ export default function Meals() {
               <button
                 onClick={() => setFilterStatus("todos")}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${filterStatus === "todos"
-                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
-                    : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
+                  : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
                   }`}
               >
                 TODOS: {employees.length}
@@ -266,8 +266,8 @@ export default function Meals() {
               <button
                 onClick={() => setFilterStatus("obra")}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${filterStatus === "obra"
-                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
-                    : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
+                  : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
                   }`}
               >
                 OBRA: {obraCount}
@@ -275,8 +275,8 @@ export default function Meals() {
               <button
                 onClick={() => setFilterStatus("alojamento")}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${filterStatus === "alojamento"
-                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
-                    : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
+                  : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
                   }`}
               >
                 ALOJAMENTO: {alojCount}

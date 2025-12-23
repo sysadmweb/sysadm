@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from "react-router";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export default function RotaProtegida({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const location = useLocation();
   if (isLoading) return null;

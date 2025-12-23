@@ -22,7 +22,7 @@ type ProductMovement = {
     };
 };
 
-export default function ProductMovement() {
+export default function MovimentacaoProduto() {
     const { user: currentUser } = useAuth();
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [movements, setMovements] = useState<ProductMovement[]>([]);
