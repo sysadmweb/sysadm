@@ -54,8 +54,8 @@ export default function Jornada() {
         setIsLoading(true);
         try {
             const [empRes, logsRes] = await Promise.all([
-                supabase.from("employees").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
-                supabase.from("work_logs").select("*").order("work_date", { ascending: false }),
+                supabase.from("funcionarios").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
+                supabase.from("registros_trabalho").select("*").order("work_date", { ascending: false }),
             ]);
 
             if (empRes.error) throw empRes.error;
@@ -92,14 +92,14 @@ export default function Jornada() {
 
             if (editingLog) {
                 const { error } = await supabase
-                    .from("work_logs")
+                    .from("registros_trabalho")
                     .update(payload)
                     .eq("id", editingLog.id);
                 if (error) throw error;
                 showToast("Jornada atualizada com sucesso!", "success");
             } else {
                 const { error } = await supabase
-                    .from("work_logs")
+                    .from("registros_trabalho")
                     .insert(payload);
                 if (error) throw error;
                 showToast("Jornada registrada com sucesso!", "success");
@@ -119,7 +119,7 @@ export default function Jornada() {
     const handleDelete = async (id: number) => {
         if (!confirm("Tem certeza que deseja excluir este registro?")) return;
         try {
-            const { error } = await supabase.from("work_logs").delete().eq("id", id);
+            const { error } = await supabase.from("registros_trabalho").delete().eq("id", id);
             if (error) throw error;
             setWorkLogs(prev => prev.filter(log => log.id !== id));
             showToast("Registro excluído.", "success");

@@ -47,12 +47,12 @@ export default function LancamentoAvulso() {
         try {
             const [purchasesRes, categoriesRes] = await Promise.all([
                 supabase
-                    .from("manual_purchases")
-                    .select("*, categories(name)")
+                    .from("compras_manuais")
+                    .select("*, categorias(name)")
                     .eq("is_active", true)
                     .order("created_at", { ascending: false }),
                 supabase
-                    .from("categories")
+                    .from("categorias")
                     .select("id, name")
                     .eq("is_active", true)
                     .order("name"),
@@ -95,14 +95,14 @@ export default function LancamentoAvulso() {
 
             if (editingPurchase) {
                 const { error } = await supabase
-                    .from("manual_purchases")
+                    .from("compras_manuais")
                     .update(payload)
                     .eq("id", editingPurchase.id);
                 if (error) throw error;
                 showToast("Lançamento atualizado", "success");
             } else {
                 const { error } = await supabase
-                    .from("manual_purchases")
+                    .from("compras_manuais")
                     .insert({ ...payload, is_active: true });
                 if (error) throw error;
                 showToast("Lançamento criado", "success");
@@ -123,7 +123,7 @@ export default function LancamentoAvulso() {
 
         try {
             const { error } = await supabase
-                .from("manual_purchases")
+                .from("compras_manuais")
                 .update({ is_active: false })
                 .eq("id", id);
             if (error) throw error;

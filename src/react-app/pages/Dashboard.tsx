@@ -25,25 +25,25 @@ export default function Dashboard() {
 
 
       const employeeCountQuery = supabase
-        .from("employees")
+        .from("funcionarios")
         .select("id", { count: "exact", head: true })
         .eq("is_active", true);
       const employeeRowsQuery = supabase
-        .from("employees")
+        .from("funcionarios")
         .select("id")
         .eq("is_active", true);
       const employeesQuery = supabase
-        .from("employees")
+        .from("funcionarios")
         .select("id, full_name, function_id, unit_id, accommodation_id, is_active, arrival_date");
       const accommodationsQuery = supabase
-        .from("accommodations")
+        .from("alojamentos")
         .select("id")
         .eq("is_active", true);
       const isSuper = currentUser?.is_super_user;
       let unitIds: number[] = [];
       if (!isSuper && currentUser?.id) {
         const { data: links } = await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .select("unit_id")
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
@@ -53,10 +53,10 @@ export default function Dashboard() {
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
-        supabase.from("functions").select("id, name").eq("is_active", true),
+        supabase.from("funcoes").select("id, name").eq("is_active", true),
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
-        supabase.from("invoices").select("total_value"),
-        supabase.from("manual_purchases").select("total_value").eq("is_active", true),
+        supabase.from("notas_fiscais").select("total_value"),
+        supabase.from("compras_manuais").select("total_value").eq("is_active", true),
       ]);
       const activeAccommodations = Array.isArray(accRows) ? accRows.length : 0;
 
@@ -67,7 +67,7 @@ export default function Dashboard() {
 
       const accIds = Array.isArray(accRows) ? (accRows as { id: number }[]).map((a) => a.id) : [];
       const { data: accommodationsWithBeds } = await supabase
-        .from("accommodations")
+        .from("alojamentos")
         .select("id, bed_count")
         .in("id", accIds.length ? accIds : [-1])
         .eq("is_active", true);

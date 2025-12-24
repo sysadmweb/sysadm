@@ -45,7 +45,7 @@ export default function Relatorios() {
         let unitIds: number[] = [];
         if (!isSuper && currentUser?.id) {
             const { data: links } = await supabase
-                .from("user_units")
+                .from("usuarios_unidades")
                 .select("unit_id")
                 .eq("user_id", currentUser.id);
             unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
@@ -58,9 +58,9 @@ export default function Relatorios() {
     const fetchJornadaData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
         const [empRes, logsRes, unitsRes] = await Promise.all([
-            supabase.from("employees").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
-            supabase.from("work_logs").select("*").order("work_date", { ascending: false }),
-            supabase.from("units").select("id, name").eq("is_active", true)
+            supabase.from("funcionarios").select("id, full_name, unit_id").eq("is_active", true).order("full_name"),
+            supabase.from("registros_trabalho").select("*").order("work_date", { ascending: false }),
+            supabase.from("unidades").select("id, name").eq("is_active", true)
         ]);
 
         if (empRes.error) throw empRes.error;
@@ -86,9 +86,9 @@ export default function Relatorios() {
     const fetchEmployeesData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
         const [empRes, unitsRes, funcsRes] = await Promise.all([
-            supabase.from("employees").select("*").eq("is_active", true),
-            supabase.from("units").select("*").eq("is_active", true),
-            supabase.from("functions").select("*").eq("is_active", true)
+            supabase.from("funcionarios").select("*").eq("is_active", true),
+            supabase.from("unidades").select("*").eq("is_active", true),
+            supabase.from("funcoes").select("*").eq("is_active", true)
         ]);
 
         if (empRes.error) throw empRes.error;
@@ -113,9 +113,9 @@ export default function Relatorios() {
         const { isSuper, unitIds } = await fetchUserUnits();
 
         const [alojRes, aguardandoRes, trabalhandoRes] = await Promise.all([
-            supabase.from("statuses").select("id").eq("name", "ALOJAMENTO").single(),
-            supabase.from("statuses").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
-            supabase.from("statuses").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
+            supabase.from("status").select("id").eq("name", "ALOJAMENTO").single(),
+            supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
         ]);
 
         if (alojRes.error) throw new Error("Status 'ALOJAMENTO' not found");
@@ -129,14 +129,14 @@ export default function Relatorios() {
         if (includeAllStatuses) {
             // When "TODOS" is selected, fetch employees with AGUARDANDO INTEGRAÇÃO or TRABALHANDO DISPONIVEL status
             const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
-            employeeQuery = supabase.from("employees")
+            employeeQuery = supabase.from("funcionarios")
                 .select("accommodation_id, refeicao_status_id, status_id")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
                 .in("status_id", statusIds);
         } else {
             // Original behavior: fetch employees with ALOJAMENTO refeicao_status or AGUARDANDO INTEGRAÇÃO status
-            employeeQuery = supabase.from("employees")
+            employeeQuery = supabase.from("funcionarios")
                 .select("accommodation_id, refeicao_status_id, status_id")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
@@ -144,7 +144,7 @@ export default function Relatorios() {
         }
 
         const [accRes, empRes] = await Promise.all([
-            supabase.from("accommodations").select("*").eq("is_active", true),
+            supabase.from("alojamentos").select("*").eq("is_active", true),
             employeeQuery
         ]);
 
@@ -177,8 +177,8 @@ export default function Relatorios() {
 
         // Fetch status IDs for "AGUARDANDO INTEGRAÇÃO" and "TRABALHANDO DISPONÍVEL"
         const [aguardandoRes, trabalhandoRes] = await Promise.all([
-            supabase.from("statuses").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
-            supabase.from("statuses").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
+            supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
         ]);
 
         const aguardandoId = aguardandoRes.data?.id;
@@ -191,8 +191,8 @@ export default function Relatorios() {
 
         // Fetch employees with the specified statuses and accommodation
         const [accRes, empRes] = await Promise.all([
-            supabase.from("accommodations").select("*").eq("is_active", true),
-            supabase.from("employees")
+            supabase.from("alojamentos").select("*").eq("is_active", true),
+            supabase.from("funcionarios")
                 .select("accommodation_id, status_id")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
@@ -229,13 +229,13 @@ export default function Relatorios() {
 
         if (mode === "obra") {
             const { data: statusData } = await supabase
-                .from("statuses")
+                .from("status")
                 .select("id")
                 .eq("name", "TRABALHANDO DISPONIVEL")
                 .single();
             if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
             const empRes = await supabase
-                .from("employees")
+                .from("funcionarios")
                 .select("id, full_name, unit_id, status_id, is_active")
                 .eq("is_active", true)
                 .eq("status_id", statusData.id)
@@ -244,7 +244,7 @@ export default function Relatorios() {
             employees = (empRes.data || []) as Employee[];
         } else {
             const empRes = await supabase
-                .from("employees")
+                .from("funcionarios")
                 .select("id, full_name, unit_id, is_active")
                 .eq("is_active", true)
                 .order("full_name");
@@ -265,7 +265,7 @@ export default function Relatorios() {
 
         // Get status ID for "TRABALHANDO DISPONIVEL"
         const { data: statusData } = await supabase
-            .from("statuses")
+            .from("status")
             .select("id")
             .eq("name", "TRABALHANDO DISPONIVEL")
             .single();
@@ -273,12 +273,12 @@ export default function Relatorios() {
         if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
 
         const [empRes, funcsRes, statusRes] = await Promise.all([
-            supabase.from("employees")
+            supabase.from("funcionarios")
                 .select("id, full_name, arrival_date, integration_date, function_id, status_id, unit_id")
                 .eq("is_active", true)
                 .eq("status_id", statusData.id),
-            supabase.from("functions").select("id, name").eq("is_active", true),
-            supabase.from("statuses").select("id, name").eq("is_active", true)
+            supabase.from("funcoes").select("id, name").eq("is_active", true),
+            supabase.from("status").select("id, name").eq("is_active", true)
         ]);
 
         if (empRes.error) throw empRes.error;

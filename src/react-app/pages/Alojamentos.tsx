@@ -45,13 +45,13 @@ export default function Alojamentos() {
       let unitIds: number[] = [];
       if (!isSuper && currentUser?.id) {
         const { data: links } = await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .select("unit_id")
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
       const base = supabase
-        .from("accommodations")
+        .from("alojamentos")
         .select("id, name, unit_id, bed_count, is_active, created_at, updated_at")
         .eq("is_active", true);
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
@@ -70,7 +70,7 @@ export default function Alojamentos() {
   const fetchEmployeeCounts = async () => {
     try {
       const { data, error } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .select("accommodation_id")
         .eq("is_active", true)
         .not("accommodation_id", "is", null);
@@ -95,13 +95,13 @@ export default function Alojamentos() {
       let unitIds: number[] = [];
       if (!isSuper && currentUser?.id) {
         const { data: links } = await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .select("unit_id")
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
       const { data, error } = await supabase
-        .from("units")
+        .from("unidades")
         .select("id, name, is_active, created_at, updated_at");
       if (!error && Array.isArray(data)) {
         const list = (data as Unit[]).filter((u) => u.is_active);
@@ -121,7 +121,7 @@ export default function Alojamentos() {
       const payload = { name: formData.name.toUpperCase(), unit_id: formData.unit_id, bed_count: Number(formData.bed_count) || 0 };
       if (editingAccommodation) {
         const { error } = await supabase
-          .from("accommodations")
+          .from("alojamentos")
           .update({ name: payload.name, unit_id: payload.unit_id, bed_count: payload.bed_count })
           .eq("id", editingAccommodation.id);
         if (error) {
@@ -131,7 +131,7 @@ export default function Alojamentos() {
         showToast("Alojamento atualizado", "success");
       } else {
         const { error } = await supabase
-          .from("accommodations")
+          .from("alojamentos")
           .insert({ name: payload.name, unit_id: payload.unit_id, bed_count: payload.bed_count, is_active: true });
         if (error) {
           showToast("Falha ao cadastrar alojamento", "error");
@@ -155,7 +155,7 @@ export default function Alojamentos() {
 
     try {
       const { error } = await supabase
-        .from("accommodations")
+        .from("alojamentos")
         .update({ is_active: false })
         .eq("id", id);
       if (error) {
@@ -185,7 +185,7 @@ export default function Alojamentos() {
       setIsLoadingEmployees(true);
       setSelectedAccommodationForEmployees(accommodation);
       const { data, error } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .select("id, full_name")
         .eq("is_active", true)
         .eq("accommodation_id", accommodation.id)

@@ -30,7 +30,7 @@ export default function Unidades() {
   const fetchUnits = async () => {
     try {
       const { data, error } = await supabase
-        .from("units")
+        .from("unidades")
         .select("id, name, is_active, created_at, updated_at");
       if (!error && Array.isArray(data)) {
         const list = (data as Unit[]).filter((u) => u.is_active);
@@ -56,7 +56,7 @@ export default function Unidades() {
       const payload = { name: formData.name.toUpperCase() };
       if (editingUnit) {
         const { error } = await supabase
-          .from("units")
+          .from("unidades")
           .update({ name: payload.name })
           .eq("id", editingUnit.id);
         if (error) {
@@ -66,7 +66,7 @@ export default function Unidades() {
         }
       } else {
         const { error } = await supabase
-          .from("units")
+          .from("unidades")
           .insert({ name: payload.name, is_active: true });
         if (error) {
           setError("Erro ao salvar unidade");
@@ -89,7 +89,7 @@ export default function Unidades() {
     if (!confirm("Tem certeza que deseja desativar esta unidade?")) return;
     try {
       const { error } = await supabase
-        .from("units")
+        .from("unidades")
         .update({ is_active: false })
         .eq("id", id);
       if (error) {
@@ -114,13 +114,13 @@ export default function Unidades() {
     setAssignModalUnit(unit);
     try {
       const { data: users } = await supabase
-        .from("users")
+        .from("usuarios")
         .select("id, username, name, is_super_user, is_active")
         .eq("is_active", true)
         .eq("is_super_user", false);
       setCommonUsers(Array.isArray(users) ? (users as User[]) : []);
       const { data: links } = await supabase
-        .from("user_units")
+        .from("usuarios_unidades")
         .select("user_id")
         .eq("unit_id", unit.id);
       const preselected = Array.isArray(links) ? (links as { user_id: number }[]).map((l) => l.user_id) : [];
@@ -140,10 +140,10 @@ export default function Unidades() {
     if (!assignModalUnit) return;
     setIsSavingAssign(true);
     try {
-      await supabase.from("user_units").delete().eq("unit_id", assignModalUnit.id);
+      await supabase.from("usuarios_unidades").delete().eq("unit_id", assignModalUnit.id);
       if (selectedUserIds.length) {
         await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .insert(selectedUserIds.map((uid) => ({ user_id: uid, unit_id: assignModalUnit.id })));
       }
       showToast("Vinculações salvas", "success");

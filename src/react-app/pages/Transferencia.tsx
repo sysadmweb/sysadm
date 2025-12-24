@@ -40,20 +40,20 @@ export default function Transferencia() {
         let unitIds: number[] = [];
         if (!isSuper && currentUser?.id) {
           const { data: links } = await supabase
-            .from("user_units")
+            .from("usuarios_unidades")
             .select("unit_id")
             .eq("user_id", currentUser.id);
           unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
         }
 
         const [unitsRes, employeesRes, functionsRes] = await Promise.all([
-          supabase.from("units").select("id, name").eq("is_active", true),
+          supabase.from("unidades").select("id, name").eq("is_active", true),
           supabase
-            .from("employees")
+            .from("funcionarios")
             .select("id, full_name, unit_id, arrival_date, departure_date, status_id, observation, function_id")
             .eq("is_active", true)
             .order("full_name"),
-          supabase.from("functions").select("id, name").eq("is_active", true)
+          supabase.from("funcoes").select("id, name").eq("is_active", true)
         ]);
 
         if (unitsRes.error) throw unitsRes.error;
@@ -100,7 +100,7 @@ export default function Transferencia() {
     try {
       // First, get all statuses that start with "TRANSFERIDO PARA"
       const { data: statuses } = await supabase
-        .from("statuses")
+        .from("status")
         .select("id, name")
         .eq("is_active", true)
         .ilike("name", "TRANSFERIDO PARA%");
@@ -116,7 +116,7 @@ export default function Transferencia() {
 
       // Fetch employees with transfer status and departure_date
       const { data: employeesData } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .select("id, full_name, unit_id, departure_date, status_id, observation, transferred_to_unit_id")
         .eq("is_active", true)
         .in("status_id", transferStatusIds)
@@ -124,7 +124,7 @@ export default function Transferencia() {
         .order("departure_date", { ascending: false });
 
       const { data: unitsData } = await supabase
-        .from("units")
+        .from("unidades")
         .select("id, name")
         .eq("is_active", true);
 
@@ -160,9 +160,9 @@ export default function Transferencia() {
 
   const ensureTransferStatus = async (unitName: string) => {
     const statusName = `TRANSFERIDO PARA ${unitName}`;
-    const { data: found } = await supabase.from("statuses").select("id").eq("name", statusName).single();
+    const { data: found } = await supabase.from("status").select("id").eq("name", statusName).single();
     if (found?.id) return found.id as number;
-    const { data, error } = await supabase.from("statuses").insert({ name: statusName, is_active: true }).select("id").single();
+    const { data, error } = await supabase.from("status").insert({ name: statusName, is_active: true }).select("id").single();
     if (error || !data) throw error || new Error("Falha ao criar status de transferência");
     return (data as { id: number }).id;
   };
@@ -189,7 +189,7 @@ export default function Transferencia() {
         const addition = `TRANSFERÊNCIA EM ${fmtDateTime} DE ${fromUnit} PARA ${toUnit}${transferObservation ? ` | OBS: ${transferObservation.toUpperCase()}` : ""}`;
         const newObs = [prevObs.toUpperCase(), addition].filter(Boolean).join(" | ");
         const { error: upError } = await supabase
-          .from("employees")
+          .from("funcionarios")
           .update({
             unit_id: targetUnitId as number,
             departure_date: departureIso,

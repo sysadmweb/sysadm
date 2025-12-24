@@ -47,7 +47,7 @@ export default function Faxineiras() {
     const fetchCleaners = async () => {
         try {
             const { data, error } = await supabase
-                .from("cleaners")
+                .from("faxineiras")
                 .select("*")
                 .eq("is_active", true)
                 .order("full_name");
@@ -79,13 +79,13 @@ export default function Faxineiras() {
 
             if (editingCleaner) {
                 const { error } = await supabase
-                    .from("cleaners")
+                    .from("faxineiras")
                     .update(payload)
                     .eq("id", editingCleaner.id);
                 if (error) throw error;
                 showToast("Faxineira atualizada!", "success");
             } else {
-                const { error } = await supabase.from("cleaners").insert(payload);
+                const { error } = await supabase.from("faxineiras").insert(payload);
                 if (error) throw error;
                 showToast("Faxineira cadastrada!", "success");
             }
@@ -104,7 +104,7 @@ export default function Faxineiras() {
         if (!confirm("Deseja realmente excluir esta faxineira?")) return;
         try {
             const { error } = await supabase
-                .from("cleaners")
+                .from("faxineiras")
                 .update({ is_active: false })
                 .eq("id", id);
             if (error) throw error;

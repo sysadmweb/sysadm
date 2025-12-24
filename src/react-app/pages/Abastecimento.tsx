@@ -35,7 +35,7 @@ export default function Abastecimento() {
     }, [user]);
 
     const fetchUnits = async () => {
-        const { data } = await supabase.from("units").select("id, name").eq("is_active", true);
+        const { data } = await supabase.from("unidades").select("id, name").eq("is_active", true);
         if (data) {
             setUnits(data);
             if (user?.unit_id) {
@@ -50,11 +50,11 @@ export default function Abastecimento() {
         setIsLoading(true);
         try {
             let query = supabase
-                .from("fuel_supplies")
+                .from("abastecimentos")
                 .select(`
                     *,
-                    units (name),
-                    users (name)
+                    unidades (name),
+                    usuarios (name)
                 `)
                 .eq("is_active", true)
                 .order("supply_date", { ascending: false });

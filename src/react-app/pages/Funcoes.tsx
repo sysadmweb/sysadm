@@ -23,7 +23,7 @@ export default function Funcoes() {
   const fetchFunctions = async () => {
     try {
       const { data, error } = await supabase
-        .from("functions")
+        .from("funcoes")
         .select("id, name, is_active, created_at, updated_at")
         .eq("is_active", true);
       if (!error && Array.isArray(data)) {
@@ -45,7 +45,7 @@ export default function Funcoes() {
       const payload = { name: formData.name.toUpperCase() };
       if (editingFunction) {
         const { error } = await supabase
-          .from("functions")
+          .from("funcoes")
           .update({ name: payload.name })
           .eq("id", editingFunction.id);
         if (error) {
@@ -55,7 +55,7 @@ export default function Funcoes() {
         showToast("Função atualizada", "success");
       } else {
         const { error } = await supabase
-          .from("functions")
+          .from("funcoes")
           .insert({ name: payload.name, is_active: true });
         if (error) {
           showToast("Falha ao cadastrar função", "error");
@@ -79,7 +79,7 @@ export default function Funcoes() {
 
     try {
       const { error } = await supabase
-        .from("functions")
+        .from("funcoes")
         .update({ is_active: false })
         .eq("id", id);
       if (error) {

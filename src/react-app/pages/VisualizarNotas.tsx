@@ -36,8 +36,8 @@ export default function VisualizarNotas() {
         setIsLoading(true);
         try {
             let query = supabase
-                .from("invoices")
-                .select("*, invoice_items(total_value)", { count: "exact" });
+                .from("notas_fiscais")
+                .select("*, itens_nota_fiscal(total_value)", { count: "exact" });
 
             if (searchTerm) {
                 const term = searchTerm.toUpperCase();
@@ -70,7 +70,7 @@ export default function VisualizarNotas() {
         if (!confirm("Tem certeza que deseja excluir esta nota fiscal?")) return;
 
         try {
-            const { error } = await supabase.from("invoices").delete().eq("id", id);
+            const { error } = await supabase.from("notas_fiscais").delete().eq("id", id);
             if (error) throw error;
             showToast("Nota fiscal excluída com sucesso", "success");
             fetchInvoices();

@@ -30,7 +30,7 @@ export default function Categorias() {
     const fetchCategories = async () => {
         try {
             const { data, error } = await supabase
-                .from("categories")
+                .from("categorias")
                 .select("id, name, is_active, created_at, updated_at")
                 .eq("is_active", true);
             if (!error && Array.isArray(data)) {
@@ -52,7 +52,7 @@ export default function Categorias() {
             const payload = { name: formData.name.toUpperCase() };
             if (editingCategory) {
                 const { error } = await supabase
-                    .from("categories")
+                    .from("categorias")
                     .update({ name: payload.name })
                     .eq("id", editingCategory.id);
                 if (error) {
@@ -62,7 +62,7 @@ export default function Categorias() {
                 showToast("Categoria atualizada", "success");
             } else {
                 const { error } = await supabase
-                    .from("categories")
+                    .from("categorias")
                     .insert({ name: payload.name, is_active: true });
                 if (error) {
                     showToast("Falha ao cadastrar categoria", "error");
@@ -86,7 +86,7 @@ export default function Categorias() {
 
         try {
             const { error } = await supabase
-                .from("categories")
+                .from("categorias")
                 .update({ is_active: false })
                 .eq("id", id);
             if (error) {

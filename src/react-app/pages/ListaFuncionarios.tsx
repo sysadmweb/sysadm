@@ -100,7 +100,7 @@ export default function ListaFuncionarios() {
             let unitIds: number[] = [];
             if (!isSuper && currentUser?.id) {
                 const { data: links } = await supabase
-                    .from("user_units")
+                    .from("usuarios_unidades")
                     .select("unit_id")
                     .eq("user_id", currentUser.id);
                 unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
@@ -108,7 +108,7 @@ export default function ListaFuncionarios() {
 
             // Get status IDs for "TRABALHANDO DISPONIVEL" and "INATIVO"
             const { data: statusData } = await supabase
-                .from("statuses")
+                .from("status")
                 .select("id, name")
                 .in("name", ["TRABALHANDO DISPONIVEL", "INATIVO"]);
 
@@ -121,7 +121,7 @@ export default function ListaFuncionarios() {
             const statusIds = statusData.map(s => s.id);
 
             const base = supabase
-                .from("employees")
+                .from("funcionarios")
                 .select(
                     "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
                 )
@@ -143,7 +143,7 @@ export default function ListaFuncionarios() {
 
     const fetchUnits = async () => {
         try {
-            const { data } = await supabase.from("units").select("id, name");
+            const { data } = await supabase.from("unidades").select("id, name");
             if (Array.isArray(data)) setUnits(data as Unit[]);
         } catch (error) {
             console.error("Error fetching units:", error);
@@ -152,7 +152,7 @@ export default function ListaFuncionarios() {
 
     const fetchStatuses = async () => {
         try {
-            const { data } = await supabase.from("statuses").select("id, name").eq("is_active", true);
+            const { data } = await supabase.from("status").select("id, name").eq("is_active", true);
             if (Array.isArray(data)) setStatuses(data as Status[]);
         } catch (error) {
             console.error("Error fetching statuses:", error);
@@ -161,7 +161,7 @@ export default function ListaFuncionarios() {
 
     const fetchFunctions = async () => {
         try {
-            const { data } = await supabase.from("functions").select("id, name").eq("is_active", true);
+            const { data } = await supabase.from("funcoes").select("id, name").eq("is_active", true);
             if (Array.isArray(data)) setFunctions(data as Function[]);
         } catch (error) {
             console.error("Error fetching functions:", error);
@@ -174,13 +174,13 @@ export default function ListaFuncionarios() {
             let unitIds: number[] = [];
             if (!isSuper && currentUser?.id) {
                 const { data: links } = await supabase
-                    .from("user_units")
+                    .from("usuarios_unidades")
                     .select("unit_id")
                     .eq("user_id", currentUser.id);
                 unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
             }
             const base = supabase
-                .from("accommodations")
+                .from("alojamentos")
                 .select("id, name, unit_id, is_active, created_at, updated_at")
                 .eq("is_active", true);
             const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("unit_id", unitIds);
@@ -207,7 +207,7 @@ export default function ListaFuncionarios() {
             };
 
             const { error } = await supabase
-                .from("employees")
+                .from("funcionarios")
                 .update(payload)
                 .eq("id", editingEmployee.id);
 

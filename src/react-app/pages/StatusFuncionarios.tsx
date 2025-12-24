@@ -30,7 +30,7 @@ export default function StatusFuncionarios() {
     const fetchStatuses = async () => {
         try {
             const { data, error } = await supabase
-                .from("statuses")
+                .from("status")
                 .select("id, name, is_active, created_at, updated_at")
                 .eq("is_active", true);
             if (!error && Array.isArray(data)) {
@@ -52,7 +52,7 @@ export default function StatusFuncionarios() {
             const payload = { name: formData.name.toUpperCase() };
             if (editingStatus) {
                 const { error } = await supabase
-                    .from("statuses")
+                    .from("status")
                     .update({ name: payload.name })
                     .eq("id", editingStatus.id);
                 if (error) {
@@ -62,7 +62,7 @@ export default function StatusFuncionarios() {
                 showToast("Status atualizado", "success");
             } else {
                 const { error } = await supabase
-                    .from("statuses")
+                    .from("status")
                     .insert({ name: payload.name, is_active: true });
                 if (error) {
                     showToast("Falha ao cadastrar status", "error");
@@ -86,7 +86,7 @@ export default function StatusFuncionarios() {
 
         try {
             const { error } = await supabase
-                .from("statuses")
+                .from("status")
                 .update({ is_active: false })
                 .eq("id", id);
             if (error) {

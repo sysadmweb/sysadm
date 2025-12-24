@@ -74,7 +74,7 @@ export default function Permissoes() {
   useEffect(() => {
     const load = async () => {
       const { data: usersData } = await supabase
-        .from("users")
+        .from("usuarios")
         .select("id, username, name, is_super_user, is_active")
         .eq("is_active", true);
       const list = Array.isArray(usersData)
@@ -95,7 +95,7 @@ export default function Permissoes() {
         return;
       }
       const { data } = await supabase
-        .from("user_permissions")
+        .from("permissoes_usuario")
         .select("id, user_id, page, can_view, can_create, can_update, can_delete, is_active")
         .eq("user_id", selectedUserId)
         .eq("is_active", true);
@@ -136,7 +136,7 @@ export default function Permissoes() {
         can_delete: next.can_delete,
         is_active: true,
       };
-      await supabase.from("user_permissions").upsert(payload, { onConflict: "user_id,page" });
+      await supabase.from("permissoes_usuario").upsert(payload, { onConflict: "user_id,page" });
     } finally {
       setSaving(false);
     }

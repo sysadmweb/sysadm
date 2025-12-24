@@ -42,7 +42,7 @@ export default function LancarXml() {
         setIsLoading(true);
         try {
             const { data: invoice, error } = await supabase
-                .from("invoices")
+                .from("notas_fiscais")
                 .select("*")
                 .eq("id", id)
                 .single();
@@ -50,7 +50,7 @@ export default function LancarXml() {
             if (error) throw error;
 
             const { data: items, error: itemsError } = await supabase
-                .from("invoice_items")
+                .from("itens_nota_fiscal")
                 .select("*")
                 .eq("invoice_id", id);
 
@@ -169,7 +169,7 @@ export default function LancarXml() {
 
             if (editId) {
                 const { error: updateError } = await supabase
-                    .from("invoices")
+                    .from("notas_fiscais")
                     .update({
                         number: parsedInvoice.number,
                         series: parsedInvoice.series,
@@ -186,10 +186,10 @@ export default function LancarXml() {
                 if (updateError) throw updateError;
 
                 // Delete existing items to recreate them (simplest way to handle updates)
-                await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
+                await supabase.from("itens_nota_fiscal").delete().eq("invoice_id", invoiceId);
             } else {
                 const { data: invoiceData, error: invoiceError } = await supabase
-                    .from("invoices")
+                    .from("notas_fiscais")
                     .insert({
                         number: parsedInvoice.number,
                         series: parsedInvoice.series,
@@ -220,7 +220,7 @@ export default function LancarXml() {
             for (const item of parsedInvoice.items) {
                 // Check if product exists
                 const { data: existingProduct } = await supabase
-                    .from("products")
+                    .from("produtos")
                     .select("id, quantity, unit_value")
                     .eq("code", item.code)
                     .single();
@@ -233,7 +233,7 @@ export default function LancarXml() {
                     // Optional: Update unit value to the latest one or average? Requirement says "sum quantity and value", assuming value means total value or just updating unit value.
                     // Let's update unit_value to the latest one.
                     const { data: updatedProduct, error: updateError } = await supabase
-                        .from("products")
+                        .from("produtos")
                         .update({
                             quantity: newQuantity,
                             unit_value: item.unit_value,
@@ -248,7 +248,7 @@ export default function LancarXml() {
                 } else {
                     // Create new product
                     const { data: newProduct, error: createError } = await supabase
-                        .from("products")
+                        .from("produtos")
                         .insert({
                             code: item.code,
                             name: item.name,
@@ -263,7 +263,7 @@ export default function LancarXml() {
                 }
 
                 // Create Invoice Item
-                await supabase.from("invoice_items").insert({
+                await supabase.from("itens_nota_fiscal").insert({
                     invoice_id: invoiceId,
                     product_id: productId,
                     product_code: item.code,

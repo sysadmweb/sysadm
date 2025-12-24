@@ -76,14 +76,14 @@ export default function Vistorias() {
 
             if (!isSuper && currentUser?.id) {
                 const { data: links } = await supabase
-                    .from("user_units")
+                    .from("usuarios_unidades")
                     .select("unit_id")
                     .eq("user_id", currentUser.id);
                 unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
             }
 
             const base = supabase
-                .from("accommodations")
+                .from("alojamentos")
                 .select("id, name, unit_id")
                 .eq("is_active", true);
 
@@ -104,7 +104,7 @@ export default function Vistorias() {
     const fetchInspections = async () => {
         try {
             const { data, error } = await supabase
-                .from("inspections")
+                .from("inspecoes")
                 .select("*")
                 .eq("is_active", true)
                 .order("created_at", { ascending: false });
@@ -143,7 +143,7 @@ export default function Vistorias() {
     const fetchUsers = async () => {
         try {
             const { data, error } = await supabase
-                .from("users")
+                .from("usuarios")
                 .select("id, name");
 
             if (!error && data) {

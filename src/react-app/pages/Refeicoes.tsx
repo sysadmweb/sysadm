@@ -128,14 +128,14 @@ export default function Refeicoes() {
         const isSuper = currentUser?.is_super_user;
         let unitIds: number[] = [];
         if (!isSuper && currentUser?.id) {
-          const { data: links } = await supabase.from("user_units").select("unit_id").eq("user_id", currentUser.id);
+          const { data: links } = await supabase.from("usuarios_unidades").select("unit_id").eq("user_id", currentUser.id);
           unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
         }
 
         const [statusesRes, employeesRes] = await Promise.all([
-          supabase.from("statuses").select("id, name, is_active"),
+          supabase.from("status").select("id, name, is_active"),
           supabase
-            .from("employees")
+            .from("funcionarios")
             .select("id, full_name, unit_id, status_id, refeicao_status_id, is_active")
             .eq("is_active", true)
             .order("full_name"),
@@ -200,7 +200,7 @@ export default function Refeicoes() {
     }
     setUpdating(true);
     try {
-      const { error } = await supabase.from("employees").update({ refeicao_status_id: targetId }).in("id", selectedIds);
+      const { error } = await supabase.from("funcionarios").update({ refeicao_status_id: targetId }).in("id", selectedIds);
       if (error) throw error;
       setEmployees((prev) => prev.map((e) => (selectedIds.includes(e.id) ? { ...e, refeicao_status_id: targetId } : e)));
       showToast("Atualizado", "success");

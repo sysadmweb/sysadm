@@ -53,7 +53,7 @@ export default function Layout() {
 
     useEffect(() => {
         const check = async () => {
-            const { error } = await supabase.from("units").select("id", { head: true }).limit(1);
+            const { error } = await supabase.from("unidades").select("id", { head: true }).limit(1);
             setDbStatus({ ok: !error, message: !error ? "Conexão ativa" : "Sem conexão" });
         };
         check();

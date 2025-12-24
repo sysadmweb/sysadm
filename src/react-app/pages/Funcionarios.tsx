@@ -92,7 +92,7 @@ export default function Funcionarios() {
       let unitIds: number[] = [];
       if (!isSuper && currentUser?.id) {
         const { data: links } = await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .select("unit_id")
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
@@ -101,7 +101,7 @@ export default function Funcionarios() {
 
       // Get status ID for "AGUARDANDO INTEGRAÇÃO"
       const { data: statusData } = await supabase
-        .from("statuses")
+        .from("status")
         .select("id")
         .eq("name", "AGUARDANDO INTEGRAÇÃO")
         .single();
@@ -113,7 +113,7 @@ export default function Funcionarios() {
       }
 
       const base = supabase
-        .from("employees")
+        .from("funcionarios")
         .select(
           "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
         )
@@ -136,7 +136,7 @@ export default function Funcionarios() {
   const fetchOccupancy = async () => {
     try {
       const { data, error } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .select("accommodation_id")
         .eq("is_active", true)
         .not("accommodation_id", "is", null);
@@ -161,13 +161,13 @@ export default function Funcionarios() {
       let unitIds: number[] = [];
       if (!isSuper && currentUser?.id) {
         const { data: links } = await supabase
-          .from("user_units")
+          .from("usuarios_unidades")
           .select("unit_id")
           .eq("user_id", currentUser.id);
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
-      const base = supabase.from("units").select("id, name").eq("is_active", true);
+      const base = supabase.from("unidades").select("id, name").eq("is_active", true);
       const { data, error } = isSuper || unitIds.length === 0 ? await base : await base.in("id", unitIds);
 
       if (!error && Array.isArray(data)) {
@@ -184,7 +184,7 @@ export default function Funcionarios() {
 
   const fetchStatuses = async () => {
     try {
-      const { data } = await supabase.from("statuses").select("id, name").eq("is_active", true);
+      const { data } = await supabase.from("status").select("id, name").eq("is_active", true);
       if (Array.isArray(data)) setStatuses(data as Status[]);
     } catch (error) {
       console.error("Error fetching statuses:", error);
@@ -193,7 +193,7 @@ export default function Funcionarios() {
 
   const fetchAccommodations = async () => {
     try {
-      const { data } = await supabase.from("accommodations").select("id, name, unit_id, bed_count").eq("is_active", true);
+      const { data } = await supabase.from("alojamentos").select("id, name, unit_id, bed_count").eq("is_active", true);
       if (Array.isArray(data)) setAccommodations(data as Accommodation[]);
     } catch (error) {
       console.error("Error fetching accommodations:", error);
@@ -203,7 +203,7 @@ export default function Funcionarios() {
   const fetchFunctions = async () => {
     try {
       const { data, error } = await supabase
-        .from("functions")
+        .from("funcoes")
         .select("id, name, is_active, created_at, updated_at")
         .eq("is_active", true);
       if (!error && Array.isArray(data)) {
