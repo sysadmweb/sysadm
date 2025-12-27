@@ -223,41 +223,41 @@ export default function Relatorios() {
         return { accommodations: accommodationsWithEmployees, employeeCounts };
     };
 
-    const fetchDDSData = async (mode: "todos" | "obra") => {
+    const fetchDDSData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
         let employees: Employee[] = [];
+        let units: Unit[] = [];
 
-        if (mode === "obra") {
-            const { data: statusData } = await supabase
-                .from("status")
-                .select("id")
-                .eq("name", "TRABALHANDO DISPONIVEL")
-                .single();
-            if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
-            const empRes = await supabase
+        const { data: statusData } = await supabase
+            .from("status")
+            .select("id")
+            .eq("name", "TRABALHANDO DISPONIVEL")
+            .single();
+
+        if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
+
+        const [empRes, unitsRes] = await Promise.all([
+            supabase
                 .from("funcionarios")
                 .select("id, full_name, unit_id, status_id, is_active")
                 .eq("is_active", true)
                 .eq("status_id", statusData.id)
-                .order("full_name");
-            if (empRes.error) throw empRes.error;
-            employees = (empRes.data || []) as Employee[];
-        } else {
-            const empRes = await supabase
-                .from("funcionarios")
-                .select("id, full_name, unit_id, is_active")
-                .eq("is_active", true)
-                .order("full_name");
-            if (empRes.error) throw empRes.error;
-            employees = (empRes.data || []) as Employee[];
-        }
+                .order("full_name"),
+            supabase.from("unidades").select("id, name").eq("is_active", true)
+        ]);
+
+        if (empRes.error) throw empRes.error;
+        if (unitsRes.error) throw unitsRes.error;
+
+        employees = (empRes.data || []) as Employee[];
+        units = (unitsRes.data || []) as Unit[];
 
         if (!isSuper) {
             if (unitIds.length > 0) employees = employees.filter(e => unitIds.includes(e.unit_id));
             else employees = [];
         }
 
-        return { employees };
+        return { employees, units };
     };
 
     const fetchIntegrationData = async () => {
@@ -658,7 +658,7 @@ export default function Relatorios() {
     };
 
     const generateDDSPDF = async (data: any) => {
-        const { employees } = data;
+        const { employees, units } = data;
         if (!employees || employees.length === 0) {
             showToast("Nenhum colaborador encontrado.", "error");
             return;
@@ -679,25 +679,40 @@ export default function Relatorios() {
             console.error("Error loading logo:", error);
         }
 
-        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
-        doc.setFontSize(18);
-        doc.text("Diálogo Diário de Segurança", 50, 20);
-        doc.setFontSize(12);
-        const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
-        doc.text(`Emitido em: ${dateLabel}`, 50, 30);
-        doc.text(`Colaboradores: ${employees.length}`, 50, 36);
+        const groupedEmployees: Record<number, Employee[]> = {};
+        employees.forEach((emp: Employee) => {
+            if (!groupedEmployees[emp.unit_id]) groupedEmployees[emp.unit_id] = [];
+            groupedEmployees[emp.unit_id].push(emp);
+        });
+        const unitIdsToPrint = Object.keys(groupedEmployees).map(Number);
 
-        autoTable(doc, {
-            startY: 45,
-            head: [["Colaboradores", "Assinatura"]],
-            body: employees.map((e: Employee) => [e.full_name || "-", ""]),
-            theme: 'grid',
-            styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3, overflow: 'linebreak', cellPadding: 2 },
-            headStyles: { fillColor: [76, 81, 191], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-            columnStyles: {
-                0: { cellWidth: 80, halign: 'left', overflow: 'linebreak' },
-                1: { cellWidth: 100, halign: 'center' }
-            }
+        unitIdsToPrint.forEach((unitId, index) => {
+            if (index > 0) doc.addPage();
+            const unit = units.find((u: Unit) => u.id === unitId);
+            const unitEmployees = groupedEmployees[unitId].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+            if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+            doc.setFontSize(18);
+            doc.text("Diálogo Diário de Segurança", 50, 20);
+            doc.setFontSize(12);
+            const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+            doc.text(`Emitido em: ${dateLabel}`, 50, 30);
+            const unitName = unit?.name || "-";
+            doc.text(`Obra: ${unitName}`, 50, 36);
+            doc.text(`Colaboradores: ${unitEmployees.length}`, 50, 42);
+
+            autoTable(doc, {
+                startY: 50,
+                head: [["Colaboradores", "Assinatura"]],
+                body: unitEmployees.map((e: Employee) => [e.full_name || "-", ""]),
+                theme: 'grid',
+                styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3, overflow: 'linebreak', cellPadding: 2 },
+                headStyles: { fillColor: [76, 81, 191], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: {
+                    0: { cellWidth: 80, halign: 'left', overflow: 'linebreak' },
+                    1: { cellWidth: 100, halign: 'center' }
+                }
+            });
         });
 
         const pdfBlob = doc.output('blob');
@@ -732,7 +747,7 @@ export default function Relatorios() {
                 data = await fetchIntegrationData();
                 await generateIntegrationPDF(data);
             } else if (selectedReport === "dds") {
-                data = await fetchDDSData("todos");
+                data = await fetchDDSData();
                 await generateDDSPDF(data);
             }
             showToast("Download iniciado!", "success");

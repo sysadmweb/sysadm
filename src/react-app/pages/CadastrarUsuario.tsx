@@ -36,7 +36,7 @@ export default function CadastrarUsuario() {
       }
       const pwHash = await bcrypt.hash(payload.password, 10);
       const { error } = await supabase
-        .from("users")
+        .from("usuarios")
         .insert({
           username: payload.username,
           password_hash: pwHash,

@@ -35,7 +35,7 @@ export default function Usuarios() {
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from("users")
+        .from("usuarios")
         .select("id, username, name, is_super_user, is_active, created_at, updated_at")
         .eq("is_active", true);
       if (!error && Array.isArray(data)) {
@@ -62,7 +62,7 @@ export default function Usuarios() {
           name: formData.name.toUpperCase(),
         };
         const { error: upErr } = await supabase
-          .from("users")
+          .from("usuarios")
           .update(payload)
           .eq("id", editingUser.id);
         if (upErr) {
@@ -75,7 +75,7 @@ export default function Usuarios() {
         if (currentUser?.is_super_user && formData.password) {
           const pwHash = await hashPassword(formData.password);
           const { error } = await supabase
-            .from("users")
+            .from("usuarios")
             .update({ password_hash: pwHash })
             .eq("id", editingUser.id);
           if (error) {
@@ -93,7 +93,7 @@ export default function Usuarios() {
         };
         const pwHash = payload.password ? await hashPassword(payload.password) : "";
         const { error } = await supabase
-          .from("users")
+          .from("usuarios")
           .insert({
             username: payload.username,
             password_hash: pwHash,
@@ -130,7 +130,7 @@ export default function Usuarios() {
 
     try {
       const { error } = await supabase
-        .from("users")
+        .from("usuarios")
         .update({ is_active: false })
         .eq("id", id);
       if (error) {

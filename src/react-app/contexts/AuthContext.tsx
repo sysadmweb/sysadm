@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const normalized = username.trim().toUpperCase();
     const { data: userRow, error } = await supabase
-      .from("users")
+      .from("usuarios")
       .select("id, username, password_hash, name, is_super_user, is_active, created_at, updated_at")
       .eq("username", normalized)
       .eq("is_active", true)
