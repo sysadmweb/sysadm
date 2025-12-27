@@ -867,7 +867,7 @@ export default function Relatorios() {
         }
         setLoadingReport("dds");
         try {
-            const data = await fetchDDSData("todos");
+            const data = await fetchDDSData();
             await generateDDSPDF(data);
             showToast("Download iniciado!", "success");
         } catch (error) {
