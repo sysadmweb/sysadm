@@ -31,7 +31,7 @@ export default function CadastroProduto() {
     const fetchProducts = async () => {
         try {
             const { data, error } = await supabase
-                .from("products")
+                .from("produtos")
                 .select("id, code, name, quantity, unit_value, created_at, updated_at")
                 .order("name", { ascending: true });
 
@@ -60,7 +60,7 @@ export default function CadastroProduto() {
 
             if (editingProduct) {
                 const { error } = await supabase
-                    .from("products")
+                    .from("produtos")
                     .update(payload)
                     .eq("id", editingProduct.id);
 
@@ -71,7 +71,7 @@ export default function CadastroProduto() {
                 showToast("Produto atualizado", "success");
             } else {
                 const { error } = await supabase
-                    .from("products")
+                    .from("produtos")
                     .insert(payload);
 
                 if (error) {
@@ -96,7 +96,7 @@ export default function CadastroProduto() {
 
         try {
             const { error } = await supabase
-                .from("products")
+                .from("produtos")
                 .delete()
                 .eq("id", id);
 

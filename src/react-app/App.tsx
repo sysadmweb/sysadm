@@ -12,6 +12,7 @@ import Quartos from "@/react-app/pages/Quartos";
 import Funcionarios from "@/react-app/pages/Funcionarios";
 import ListaFuncionarios from "@/react-app/pages/ListaFuncionarios";
 import Transferencia from "@/react-app/pages/Transferencia";
+import ListarTransferencias from "@/react-app/pages/ListarTransferencias";
 import Vistorias from "@/react-app/pages/Vistorias";
 import LancarXml from "@/react-app/pages/LancarXml";
 import VisualizarNotas from "@/react-app/pages/VisualizarNotas";
@@ -53,6 +54,7 @@ export default function App() {
                         <Route path="employees" element={<Funcionarios />} />
                         <Route path="employees/list" element={<ListaFuncionarios />} />
                         <Route path="employees/transfer" element={<Transferencia />} />
+                        <Route path="employees/transfers-list" element={<ListarTransferencias />} />
                         <Route path="inspection" element={<Vistorias />} />
                         <Route path="purchases/xml" element={<LancarXml />} />
                         <Route path="purchases/view" element={<VisualizarNotas />} />

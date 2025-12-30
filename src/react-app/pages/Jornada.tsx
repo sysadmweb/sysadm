@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Loader2, Save, Trash2, Edit, Plus, Calendar, User } from "lucide-react";
+import AlertModal from "../components/AlertModal";
 
 type Employee = {
     id: number;
     full_name: string;
     unit_id: number;
 };
-
-
 
 type WorkLog = {
     id: number;
@@ -18,7 +17,7 @@ type WorkLog = {
     exit_time_1: string | null;
     entry_time_2: string | null;
     exit_time_2: string | null;
-    observation: string | null; // Added
+    observation: string | null;
     created_at: string;
 };
 
@@ -30,6 +29,7 @@ export default function Jornada() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
     const [editingLog, setEditingLog] = useState<WorkLog | null>(null);
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         employee_id: 0,
@@ -38,7 +38,7 @@ export default function Jornada() {
         exit_time_1: "",
         entry_time_2: "",
         exit_time_2: "",
-        observation: "", // Added
+        observation: "",
     });
 
     const showToast = (text: string, kind: "success" | "error") => {
@@ -74,7 +74,7 @@ export default function Jornada() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.employee_id) {
-            showToast("Selecione um colaborador.", "error");
+            setAlertMessage("Selecione um colaborador.");
             return;
         }
 
@@ -87,7 +87,7 @@ export default function Jornada() {
                 exit_time_1: formData.exit_time_1 || null,
                 entry_time_2: formData.entry_time_2 || null,
                 exit_time_2: formData.exit_time_2 || null,
-                observation: formData.observation || null, // Added
+                observation: formData.observation || null,
             };
 
             if (editingLog) {
@@ -151,7 +151,7 @@ export default function Jornada() {
             exit_time_1: log.exit_time_1 || "",
             entry_time_2: log.entry_time_2 || "",
             exit_time_2: log.exit_time_2 || "",
-            observation: log.observation || "", // Added
+            observation: log.observation || "",
         });
         setShowModal(true);
     };
@@ -160,8 +160,6 @@ export default function Jornada() {
         resetForm();
         setShowModal(true);
     };
-
-
 
     return (
         <div className="space-y-6">
@@ -429,6 +427,11 @@ export default function Jornada() {
                     </div>
                 </div>
             )}
+            <AlertModal
+                isOpen={!!alertMessage}
+                message={alertMessage || ""}
+                onClose={() => setAlertMessage(null)}
+            />
         </div>
     );
 }

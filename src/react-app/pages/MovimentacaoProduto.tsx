@@ -63,7 +63,7 @@ export default function MovimentacaoProduto() {
     const fetchEmployees = async () => {
         try {
             const { data, error } = await supabase
-                .from("employees")
+                .from("funcionarios")
                 .select("*")
                 .eq("is_active", true)
                 .order("full_name");
@@ -79,7 +79,7 @@ export default function MovimentacaoProduto() {
     const fetchProducts = async () => {
         try {
             const { data, error } = await supabase
-                .from("products")
+                .from("produtos")
                 .select("*")
                 .order("name");
 
@@ -94,10 +94,10 @@ export default function MovimentacaoProduto() {
     const fetchMovements = async () => {
         try {
             const { data, error } = await supabase
-                .from("product_movements")
+                .from("movimentacoes_produto")
                 .select(`
                     *,
-                    products (
+                    products:produtos (
                         name,
                         code
                     )

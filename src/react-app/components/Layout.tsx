@@ -78,6 +78,8 @@ export default function Layout() {
                 { path: "/employees", icon: UserCircle, label: "Integração", key: "employees_integration" },
                 { path: "/employees/list", icon: UserCircle, label: "Lista de funcionários", key: "employees_list" },
                 { path: "/employees/transfer", icon: UserCircle, label: "Transferência", key: "employees_transfer" },
+                { path: "/employees/transfers-list", icon: UserCircle, label: "Histórico de Transferências", key: "employees_transfers_list" },
+
             ],
         },
         { path: "/accommodations", icon: Home, label: "Alojamentos", key: "accommodations" },

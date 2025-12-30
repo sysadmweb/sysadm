@@ -3,6 +3,7 @@ import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Unit, Function } from "@/shared/types";
 import { Users, CalendarClock, Loader2, Search, CheckSquare, X } from "lucide-react";
+import AlertModal from "../components/AlertModal";
 
 export default function Transferencia() {
   const { user: currentUser } = useAuth();
@@ -24,8 +25,7 @@ export default function Transferencia() {
   const [functionFilter, setFunctionFilter] = useState<number | "">("");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
   const [loadingAction, setLoadingAction] = useState(false);
-  type TransferLog = { id: number; name: string; fromUnit: string; toUnit: string; dateTime: string; observation: string };
-  const [dbTransferLogs, setDbTransferLogs] = useState<TransferLog[]>([]);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -72,7 +72,7 @@ export default function Transferencia() {
           // Unidades: sempre listar todas as ativas para destino
         }
 
-        const activeEmployees = employeesData.filter(e => e.arrival_date && !e.departure_date);
+        const activeEmployees = employeesData.filter(e => e.arrival_date);
         setUnits(unitsData);
         setEmployees(activeEmployees);
         setFunctions(functionsData);
@@ -84,7 +84,6 @@ export default function Transferencia() {
       }
     };
     fetchData();
-    fetchTransferHistory();
   }, [currentUser]);
 
   const displayedEmployees = useMemo(() => {
@@ -96,60 +95,7 @@ export default function Transferencia() {
     });
   }, [employees, searchTerm, functionFilter]);
 
-  const fetchTransferHistory = async () => {
-    try {
-      // First, get all statuses that start with "TRANSFERIDO PARA"
-      const { data: statuses } = await supabase
-        .from("status")
-        .select("id, name")
-        .eq("is_active", true)
-        .ilike("name", "TRANSFERIDO PARA%");
 
-      if (!statuses || statuses.length === 0) {
-        setDbTransferLogs([]);
-        return;
-      }
-
-      const transferStatusIds = statuses.map((s: any) => s.id);
-      const statusMap = new Map<number, string>();
-      statuses.forEach((s: any) => statusMap.set(s.id, s.name));
-
-      // Fetch employees with transfer status and departure_date
-      const { data: employeesData } = await supabase
-        .from("funcionarios")
-        .select("id, full_name, unit_id, departure_date, status_id, observation, transferred_to_unit_id")
-        .eq("is_active", true)
-        .in("status_id", transferStatusIds)
-        .not("departure_date", "is", null)
-        .order("departure_date", { ascending: false });
-
-      const { data: unitsData } = await supabase
-        .from("unidades")
-        .select("id, name")
-        .eq("is_active", true);
-
-      const unitMap = new Map<number, string>();
-      (unitsData || []).forEach((u: any) => unitMap.set(u.id, u.name));
-
-      const logs: TransferLog[] = (employeesData || []).map((e: any) => {
-        const toStatus = statusMap.get(e.status_id) || "";
-        const toUnit = toStatus.replace(/^TRANSFERIDO PARA\s*/, "");
-        const obs: string = e.observation || "";
-        let fromUnit = unitMap.get(e.unit_id) || "-";
-
-        // Try to extract fromUnit from observation
-        const m = obs.match(/DE\s+(.+?)\s+PARA\s+(.+?)(\s|$)/i);
-        if (m && m[1]) fromUnit = m[1];
-
-        const dt = e.departure_date ? new Date(e.departure_date).toLocaleString("pt-BR", { timeZone: "UTC" }) : "-";
-        return { id: e.id, name: e.full_name, fromUnit, toUnit, dateTime: dt, observation: obs };
-      });
-
-      setDbTransferLogs(logs);
-    } catch (error) {
-      console.error("Error fetching transfer history:", error);
-    }
-  };
 
   const toggleEmployee = (id: number) => {
     setSelectedEmployeeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -158,42 +104,64 @@ export default function Transferencia() {
   const selectAll = () => setSelectedEmployeeIds(displayedEmployees.map((e) => e.id));
   const clearAll = () => setSelectedEmployeeIds([]);
 
-  const ensureTransferStatus = async (unitName: string) => {
-    const statusName = `TRANSFERIDO PARA ${unitName}`;
-    const { data: found } = await supabase.from("status").select("id").eq("name", statusName).single();
-    if (found?.id) return found.id as number;
-    const { data, error } = await supabase.from("status").insert({ name: statusName, is_active: true }).select("id").single();
-    if (error || !data) throw error || new Error("Falha ao criar status de transferência");
-    return (data as { id: number }).id;
-  };
-
   const handleTransfer = async () => {
     if (!transferDate || !transferTime || !arrivalDate || !arrivalTime || !targetUnitId || selectedEmployeeIds.length === 0) {
-      showToast("Preencha data/hora de saída, data/hora de chegada, unidade e selecione colaboradores", "error");
+      setAlertMessage("Preencha data/hora de saída, data/hora de chegada, unidade e selecione colaboradores");
       return;
     }
     setLoadingAction(true);
     try {
       const unit = units.find((u) => u.id === targetUnitId);
       if (!unit) throw new Error("Unidade destino inválida");
-      const statusId = await ensureTransferStatus(unit.name);
-      const departureIso = new Date(`${transferDate}T${transferTime}:00`).toISOString();
-      const arrivalIso = new Date(`${arrivalDate}T${arrivalTime}:00`).toISOString();
+
+      // Buscar status "AGUARDANDO INTEGRAÇÃO"
+      const { data: statusData } = await supabase
+        .from("status")
+        .select("id")
+        .eq("name", "AGUARDANDO INTEGRAÇÃO")
+        .single();
+
+      const targetStatusId = statusData?.id || 4;
+
+      // Force PT-BR timezone (-03:00)
+      // Format: YYYY-MM-DDTHH:mm:00-03:00
+      const departureIso = `${transferDate}T${transferTime}:00-03:00`;
+      const arrivalIso = `${arrivalDate}T${arrivalTime}:00-03:00`;
+
       const updates = selectedEmployeeIds.map(async (empId) => {
         const emp = employees.find((e) => e.id === empId);
         if (!emp) return;
+
+        // 1. Insert into Funcionario_Transferencia
+        const { error: insError } = await supabase
+          .from("funcionario_transferencia")
+          .insert({
+            funcionario_id: empId,
+            data_saida: departureIso,
+            data_chegada: arrivalIso,
+            unidade_atual_id: emp.unit_id,
+            unidade_destino_id: targetUnitId,
+            usuario_id: currentUser?.id,
+            observacao: transferObservation || null
+          });
+
+        if (insError) throw insError;
+
+        // 2. Update Funcionario
+        const fmtDateTime = new Date(`${transferDate}T${transferTime}:00`).toLocaleString("pt-BR");
         const fromUnit = units.find((u) => u.id === emp.unit_id)?.name || "-";
         const toUnit = unit.name;
-        const fmtDateTime = new Date(`${transferDate}T${transferTime}:00`).toLocaleString("pt-BR");
+
         const prevObs = (emp as any).observation ? String((emp as any).observation) : "";
         const addition = `TRANSFERÊNCIA EM ${fmtDateTime} DE ${fromUnit} PARA ${toUnit}${transferObservation ? ` | OBS: ${transferObservation.toUpperCase()}` : ""}`;
         const newObs = [prevObs.toUpperCase(), addition].filter(Boolean).join(" | ");
+
         const { error: upError } = await supabase
           .from("funcionarios")
           .update({
             unit_id: targetUnitId as number,
             departure_date: departureIso,
-            status_id: statusId,
+            status_id: targetStatusId,
             accommodation_id: null,
             observation: newObs,
             transferred_to_unit_id: targetUnitId as number,
@@ -201,12 +169,12 @@ export default function Transferencia() {
           })
           .eq("id", empId);
         if (upError) throw upError;
-        setDbTransferLogs((prev: TransferLog[]) => [{ id: empId, name: emp.full_name, fromUnit, toUnit, dateTime: fmtDateTime, observation: transferObservation }, ...prev]);
       });
+
       await Promise.all(updates);
       showToast("Transferência realizada", "success");
       setSelectedEmployeeIds([]);
-      fetchTransferHistory();
+      setTransferObservation("");
     } catch (error) {
       console.error("Transfer error:", error);
       showToast("Falha ao transferir colaboradores", "error");
@@ -397,42 +365,12 @@ export default function Transferencia() {
           </div>
         )
       }
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl mt-6">
-        <div className="p-4 border-b border-slate-700/50">
-          <h2 className="text-lg font-bold text-slate-100">Transferências</h2>
-          <p className="text-slate-400 text-sm">Últimas transferências registradas</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-800/50 border-b border-slate-700/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Data/Hora</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Colaborador</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">De</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Para</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Observação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/50">
-              {dbTransferLogs.length === 0 ? (
-                <tr>
-                  <td className="px-6 py-3 text-slate-400" colSpan={5}>Nenhuma transferência encontrada.</td>
-                </tr>
-              ) : (
-                dbTransferLogs.map((log) => (
-                  <tr key={`${log.id}-${log.dateTime}`} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-6 py-3 text-slate-200 font-mono text-sm">{log.dateTime}</td>
-                    <td className="px-6 py-3 text-slate-200">{log.name}</td>
-                    <td className="px-6 py-3 text-slate-400">{log.fromUnit}</td>
-                    <td className="px-6 py-3 text-slate-400">{log.toUnit}</td>
-                    <td className="px-6 py-3 text-slate-400">{log.observation || "-"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+
+      <AlertModal
+        isOpen={!!alertMessage}
+        message={alertMessage || ""}
+        onClose={() => setAlertMessage(null)}
+      />
     </div >
   );
 }

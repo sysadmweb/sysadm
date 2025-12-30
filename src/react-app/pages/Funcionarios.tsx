@@ -11,8 +11,10 @@ import {
   Loader2,
   UserCircle,
   CheckCircle,
-  AlertTriangle,
+
 } from "lucide-react";
+
+import AlertModal from "../components/AlertModal";
 
 import { Employee, Unit, Status, Function, Accommodation } from "../../shared/types";
 
@@ -262,23 +264,23 @@ export default function Funcionarios() {
 
       if (editingEmployee) {
         const { error } = await supabase
-          .from("employees")
+          .from("funcionarios")
           .update(payload)
           .eq("id", editingEmployee.id);
         if (error) {
-          showToast("Falha ao salvar funcionário", "error");
+          setValidationError({ message: error.message || "Erro ao atualizar funcionário" });
           return;
         }
         showToast("Funcionário atualizado", "success");
       } else {
         const { error } = await supabase
-          .from("employees")
+          .from("funcionarios")
           .insert({
             ...payload,
             is_active: true,
           });
         if (error) {
-          showToast("Falha ao cadastrar funcionário", "error");
+          setValidationError({ message: error.message || "Erro ao criar funcionário" });
           return;
         }
         showToast("Funcionário criado", "success");
@@ -289,9 +291,9 @@ export default function Funcionarios() {
       resetFormData();
       fetchEmployees();
       fetchOccupancy();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving employee:", error);
-      showToast("Falha ao salvar funcionário", "error");
+      setValidationError({ message: error?.message || "Erro desconhecido ao salvar funcionário" });
     }
   };
 
@@ -318,12 +320,12 @@ export default function Funcionarios() {
       };
 
       const { error } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .update(payload)
         .eq("id", approvingEmployee.id);
 
       if (error) {
-        showToast("Falha ao aprovar funcionário", "error");
+        setValidationError({ message: error.message || "Erro ao aprovar funcionário" });
         return;
       }
 
@@ -332,9 +334,9 @@ export default function Funcionarios() {
       setApprovingEmployee(null);
       setApproveDate("");
       fetchEmployees();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving employee:", error);
-      showToast("Falha ao aprovar funcionário", "error");
+      setValidationError({ message: error?.message || "Erro desconhecido ao aprovar funcionário" });
     }
   };
 
@@ -343,19 +345,19 @@ export default function Funcionarios() {
 
     try {
       const { error } = await supabase
-        .from("employees")
+        .from("funcionarios")
         .update({ is_active: false })
         .eq("id", id);
       if (error) {
-        showToast("Falha ao desativar funcionário", "error");
+        setValidationError({ message: error.message || "Erro ao desativar funcionário" });
         return;
       }
       showToast("Funcionário desativado", "success");
       fetchEmployees();
       fetchOccupancy();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting employee:", error);
-      showToast("Falha ao desativar funcionário", "error");
+      setValidationError({ message: error?.message || "Erro desconhecido ao desativar funcionário" });
     }
   };
 
@@ -930,23 +932,11 @@ export default function Funcionarios() {
         </div>
       )}
       {/* Alert Modal */}
-      {validationError && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-red-500/50 p-6 rounded-xl shadow-2xl w-full max-w-sm text-center relative animate-in fade-in zoom-in duration-300">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 mb-4">
-              <AlertTriangle className="h-10 w-10 text-red-500" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-100 mb-2">Atenção Necessária</h3>
-            <p className="text-slate-300 mb-6">{validationError.message}</p>
-            <button
-              onClick={() => setValidationError(null)}
-              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all"
-            >
-              OK, Entendi
-            </button>
-          </div>
-        </div>
-      )}
+      <AlertModal
+        isOpen={!!validationError}
+        message={validationError?.message || ""}
+        onClose={() => setValidationError(null)}
+      />
     </div>
   );
 }

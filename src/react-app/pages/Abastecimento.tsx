@@ -3,6 +3,7 @@ import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Plus, Loader2, Fuel, Image as ImageIcon, ExternalLink } from "lucide-react";
 import { FuelSupply } from "@/shared/types";
+import AlertModal from "../components/AlertModal";
 
 // Simple helper for dates
 const formatDate = (dateString: string) => {
@@ -18,6 +19,7 @@ export default function Abastecimento() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [progressMessage, setProgressMessage] = useState("");
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
     // Form inputs
     const [supplyDate, setSupplyDate] = useState(new Date().toISOString().split("T")[0]);
@@ -59,10 +61,7 @@ export default function Abastecimento() {
                 .eq("is_active", true)
                 .order("supply_date", { ascending: false });
 
-            // If not superuser, filter by unit ?? Or maybe they can see all? 
-            // Usually filter by unit if strict multitenancy, but let's assume they can see what they have access to via RLS
-            // RLS implies "true" in my migration for authenticated, so everyone sees everything. 
-            // I'll filter by unit if user has one assigned and is not superuser, just to be safe visually.
+            // If not superuser, filter by unit
             if (!user?.is_super_user && user?.unit_id) {
                 query = query.eq("unit_id", user.unit_id);
             }
@@ -77,21 +76,36 @@ export default function Abastecimento() {
         }
     };
 
+    const resetForm = () => {
+        setSupplyDate(new Date().toISOString().split("T")[0]);
+        setKmFile(null);
+        setPlateFile(null);
+        setReceiptFile(null);
+    };
+
+    const handleFileChange = (setter: (f: File | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setter(e.target.files[0]);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Simulação de envio, já que a integração foi removida.
-        // Se desejar salvar apenas os dados (sem fotos reais), precisaria alterar o banco ou enviar placeholders.
-        // Como o pedido foi "deixar a tela crua", apenas simularemos o sucesso.
+        // Validate that a unit is selected (if units are fetched)
+        if (units.length > 0 && !selectedUnitId) {
+            setAlertMessage("Por favor, selecione uma unidade.");
+            return;
+        }
 
         setIsSubmitting(true);
-        // setProgressMessage("Salvando..."); // removido pois não vamos salvar real
+        // setProgressMessage("Salvando..."); 
 
         try {
             // Mock delay
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Aqui entraria a lógica de salvar no banco, mas sem URLs de fotos não podemos preencher os campos obrigatórios.
+            // Logic to save would go here
             // await supabase.from("fuel_supplies").insert({...});
 
             setIsModalOpen(false);
@@ -104,19 +118,6 @@ export default function Abastecimento() {
         } finally {
             setIsSubmitting(false);
             setProgressMessage("");
-        }
-    };
-
-    const resetForm = () => {
-        setSupplyDate(new Date().toISOString().split("T")[0]);
-        setKmFile(null);
-        setPlateFile(null);
-        setReceiptFile(null);
-    };
-
-    const handleFileChange = (setter: (f: File | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setter(e.target.files[0]);
         }
     };
 
@@ -260,6 +261,12 @@ export default function Abastecimento() {
                     </div>
                 </div>
             )}
+
+            <AlertModal
+                isOpen={!!alertMessage}
+                message={alertMessage || ""}
+                onClose={() => setAlertMessage(null)}
+            />
         </div>
     );
 }

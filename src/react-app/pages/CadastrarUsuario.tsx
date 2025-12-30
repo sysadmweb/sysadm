@@ -4,6 +4,7 @@ import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Shield, User as UserIcon, ArrowLeft } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import * as bcrypt from "bcryptjs";
+import AlertModal from "../components/AlertModal";
 
 export default function CadastrarUsuario() {
   const { user: currentUser } = useAuth();
@@ -16,6 +17,7 @@ export default function CadastrarUsuario() {
     name: "",
     is_super_user: false,
   });
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
   useEffect(() => { }, []);
 
@@ -31,7 +33,7 @@ export default function CadastrarUsuario() {
         is_super_user: !!formData.is_super_user,
       };
       if (payload.password.length < 4) {
-        setError("A senha deve ter pelo menos 4 caracteres");
+        setAlertMessage("A senha deve ter pelo menos 4 caracteres");
         return;
       }
       const pwHash = await bcrypt.hash(payload.password, 10);
@@ -166,6 +168,12 @@ export default function CadastrarUsuario() {
           </div>
         </form>
       </div>
-    </div>
+
+      <AlertModal
+        isOpen={!!alertMessage}
+        message={alertMessage || ""}
+        onClose={() => setAlertMessage(null)}
+      />
+    </div >
   );
 }
