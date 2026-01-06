@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Status } from "@/shared/types";
-import { Search, Utensils, Loader2, CheckSquare } from "lucide-react";
+import { Search, Utensils, Loader2, CheckSquare, CreditCard } from "lucide-react";
 
 // Calendar Component
 function WorkDaysCalendar() {
@@ -115,6 +115,7 @@ export default function Refeicoes() {
   const [filterStatus, setFilterStatus] = useState<"todos" | "obra" | "alojamento">("todos");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [updating, setUpdating] = useState(false);
+  const [mealConfig, setMealConfig] = useState({ targetDays: 0, stock: 0 });
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -132,17 +133,24 @@ export default function Refeicoes() {
           unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
         }
 
-        const [statusesRes, employeesRes] = await Promise.all([
+        const [statusesRes, employeesRes, configRes] = await Promise.all([
           supabase.from("status").select("id, name, is_active"),
           supabase
             .from("funcionarios")
             .select("id, full_name, unit_id, status_id, refeicao_status_id, is_active")
             .eq("is_active", true)
             .order("full_name"),
+          supabase.from("config").select("*"),
         ]);
 
         if (statusesRes.error) throw statusesRes.error;
         if (employeesRes.error) throw employeesRes.error;
+        if (configRes.error) throw configRes.error;
+
+        const configData = (configRes.data || []) as { key: string; value: string }[];
+        const targetDays = Number(configData.find((c) => c.key === "meal_target_days")?.value || 0);
+        const stock = Number(configData.find((c) => c.key === "meal_stock")?.value || 0);
+        setMealConfig({ targetDays, stock });
 
         let emps = (employeesRes.data || []) as Employee[];
         if (!isSuper && unitIds.length > 0) {
@@ -361,9 +369,58 @@ export default function Refeicoes() {
         </div>
 
         {/* Right Section - Calendar */}
-        <div className="lg:col-span-1">
+
+        <div className="lg:col-span-1 space-y-6">
           <WorkDaysCalendar />
+
+          {/* Meal Calculation Card */}
+          <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                <CreditCard className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">Projeção de Vales</h3>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                  <p className="text-xs text-slate-400 mb-1">Funcionários Ativos</p>
+                  <p className="text-xl font-bold text-slate-200">{employees.length}</p>
+                </div>
+                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                  <p className="text-xs text-slate-400 mb-1">Estoque Atual</p>
+                  <p className="text-xl font-bold text-blue-400">{mealConfig.stock}</p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-700/50">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-400">Dias de Cobertura:</span>
+                  <span className={`font-bold ${(mealConfig.stock / (employees.length || 1)) < 5 ? "text-red-400" : "text-green-400"
+                    }`}>
+                    {Math.floor(mealConfig.stock / (employees.length || 1))} dias
+                  </span>
+                </div>
+                {/* Calculation: Needed = (TargetDays * DailyUsage) - Stock */}
+                <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700">
+                  <p className="text-xs text-slate-400 mb-1">Necessário Comprar</p>
+                  <div className="flex items-end justify-between">
+                    <p className="text-2xl font-bold text-slate-100">
+                      {Math.max(0, (mealConfig.targetDays * employees.length) - mealConfig.stock)}
+                    </p>
+                    <span className="text-xs text-slate-500 mb-1">
+                      para atingir {mealConfig.targetDays} dias
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   );

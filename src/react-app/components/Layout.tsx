@@ -23,7 +23,8 @@ import {
     Activity,
     Package,
     Utensils,
-    Fuel
+    Fuel,
+    Settings
 } from "lucide-react";
 
 export default function Layout() {
@@ -117,6 +118,7 @@ export default function Layout() {
         ...(user?.is_super_user ? [{ path: "/units", icon: Building2, label: "Unidades", key: "units" }] : []),
         ...(user?.is_super_user ? [{ path: "/users", icon: Users, label: "Usuários", key: "users" }] : []),
         ...(user?.is_super_user ? [{ path: "/permissions", icon: UserLock, label: "Regras", key: "permissions" }] : []),
+        { path: "/settings", icon: Settings, label: "Configurações", key: "settings" },
     ];
 
     const navItems = rawNavItems.filter((item) => {

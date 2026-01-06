@@ -12,7 +12,7 @@ export function usePermissions() {
     const load = async () => {
       if (!user) return;
       const { data, error } = await supabase
-        .from("user_permissions")
+        .from("permissoes_usuario")
         .select("page, can_view, can_create, can_update, can_delete")
         .eq("user_id", user.id)
         .eq("is_active", true);

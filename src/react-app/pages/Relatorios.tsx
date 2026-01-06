@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { FileDown, Loader2, Utensils, Clock, Users, X, Coffee, Sun, Moon, UserCircle } from "lucide-react";
+import { FileDown, Loader2, Utensils, Clock, Users, X, Coffee, Sun, Moon, UserCircle, Image } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
@@ -85,8 +85,22 @@ export default function Relatorios() {
 
     const fetchEmployeesData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
+
+        // Fetch specific statuses
+        const [aguardandoRes, trabalhandoRes] = await Promise.all([
+            supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
+        ]);
+
+        const aguardandoId = aguardandoRes.data?.id;
+        const trabalhandoId = trabalhandoRes.data?.id;
+        const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
+
         const [empRes, unitsRes, funcsRes] = await Promise.all([
-            supabase.from("funcionarios").select("*").eq("is_active", true),
+            supabase.from("funcionarios")
+                .select("*")
+                .eq("is_active", true)
+                .in("status_id", statusIds),
             supabase.from("unidades").select("*").eq("is_active", true),
             supabase.from("funcoes").select("*").eq("is_active", true)
         ]);
@@ -105,8 +119,11 @@ export default function Relatorios() {
             employees = [];
         }
 
-        const activeEmployees = employees.filter(e => e.arrival_date && !e.departure_date);
-        return { employees: activeEmployees, units, functions };
+        // We don't filter by arrival/departure date anymore based on the new requirement, 
+        // as we are filtering by specific statuses.
+        // const activeEmployees = employees.filter(e => e.arrival_date && !e.departure_date);
+
+        return { employees, units, functions };
     };
 
     const fetchMarmitasData = async (includeAllStatuses: boolean = false) => {
@@ -374,7 +391,7 @@ export default function Relatorios() {
         URL.revokeObjectURL(url);
     };
 
-    const generateEmployeesPDF = async (data: any) => {
+    const generateEmployeesPDF = async (data: any, reportDate: string) => {
         const { employees, units, functions } = data;
         if (employees.length === 0) {
             showToast("Nenhum colaborador ativo.", "error");
@@ -420,7 +437,8 @@ export default function Relatorios() {
             currentY += lineHeight;
             doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
             currentY += lineHeight;
-            doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+            const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+            doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
             autoTable(doc, {
                 startY: 56,
@@ -735,8 +753,12 @@ export default function Relatorios() {
                 data = await fetchJornadaData();
                 await generateJornadaPDF(data);
             } else if (selectedReport === "employees") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchEmployeesData();
-                await generateEmployeesPDF(data);
+                await generateEmployeesPDF(data, reportDate);
             } else if (selectedReport === "marmitas") {
                 data = await fetchMarmitasData();
                 await generateMarmitasPDF(data);
@@ -809,6 +831,52 @@ export default function Relatorios() {
         } finally {
             setLoadingReport(null);
             setSelectedReport(null);
+            setPreviewData(null);
+            setPreviewType(null);
+        }
+    };
+
+    const handleEmployeesDirectJPEG = async () => {
+        if (!reportDate) {
+            showToast("Por favor, selecione uma data.", "error");
+            return;
+        }
+        setLoadingReport("employees-img");
+        try {
+            // 1. Fetch Data
+            const data = await fetchEmployeesData();
+
+            // 2. Set Preview Data & Type
+            setPreviewData({ ...data, reportDate });
+            setPreviewType("employees");
+
+            // 3. Wait for render
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // 4. Capture
+            if (previewRef.current) {
+                const canvas = await html2canvas(previewRef.current, {
+                    scale: 3,
+                    backgroundColor: "#ffffff",
+                    useCORS: true
+                });
+
+                // 5. Download
+                const link = document.createElement('a');
+                link.download = `relatorio_colaboradores.jpg`;
+                link.href = canvas.toDataURL("image/jpeg", 1.0);
+                link.click();
+
+                showToast("Imagem gerada com sucesso!", "success");
+            } else {
+                throw new Error("Preview element not found");
+            }
+
+        } catch (error) {
+            console.error("Error generating JPEG:", error);
+            showToast("Erro ao gerar imagem.", "error");
+        } finally {
+            setLoadingReport(null);
             setPreviewData(null);
             setPreviewType(null);
         }
@@ -959,8 +1027,8 @@ export default function Relatorios() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
 
-                        {/* Date input for Café da Manhã, Marmitas and DDS */}
-                        {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds") && (
+                        {/* Date input for Café da Manhã, Marmitas, DDS and Employees */}
+                        {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds" || report.id === "employees") && (
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
                                 <input
@@ -1085,6 +1153,19 @@ export default function Relatorios() {
                                     )}
                                     <span className="text-slate-200 font-medium">Download PDF</span>
                                 </button>
+
+                                <button
+                                    onClick={handleEmployeesDirectJPEG}
+                                    disabled={loadingReport !== null}
+                                    className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all mt-3"
+                                >
+                                    {loadingReport === 'employees-img' ? (
+                                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                                    ) : (
+                                        <Image className="w-8 h-8 text-blue-400" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">Download Imagem</span>
+                                </button>
                             </>
                         ) : null}
 
@@ -1134,7 +1215,7 @@ export default function Relatorios() {
                 {previewData && (
                     <div className="space-y-6">
                         {/* Header for non-marmitas reports */}
-                        {previewType !== "marmitas" && previewType !== "dds" && (
+                        {previewType !== "marmitas" && previewType !== "dds" && previewType !== "employees" && (
                             <div className="flex items-center gap-4 mb-8 border-b pb-4">
                                 <img src="/logo.png" alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
                                 <div>
@@ -1235,30 +1316,43 @@ export default function Relatorios() {
                         )}
 
                         {previewType === "employees" && (
-                            <div className="space-y-8">
+                            <div className="space-y-12">
                                 {Object.entries(previewData.employees.reduce((acc: any, emp: any) => {
                                     if (!acc[emp.unit_id]) acc[emp.unit_id] = [];
                                     acc[emp.unit_id].push(emp);
                                     return acc;
                                 }, {})).map(([unitId, emps]: [string, any]) => {
                                     const unit = previewData.units.find((u: any) => u.id === Number(unitId));
+                                    const dateLabel = previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+
                                     return (
                                         <div key={unitId} className="break-inside-avoid">
-                                            <div className="mb-2 bg-gray-100 p-3 rounded">
-                                                <p className="font-bold">Obra: {unit?.name}</p>
+                                            {/* Header matching PDF */}
+                                            <div className="flex items-start gap-4 mb-6">
+                                                <img src="/logo.png" alt="Logo" className="w-24 h-24 object-contain" />
+                                                <div className="pt-2">
+                                                    <h1 className="text-3xl font-bold text-gray-900 mb-4">LISTA DE COLABORADORES</h1>
+                                                    <div className="space-y-1 text-lg">
+                                                        <p><span className="font-semibold">Total de Colaboradores:</span> {previewData.employees.length}</p>
+                                                        <p><span className="font-semibold">Obra:</span> {unit?.name || "-"}</p>
+                                                        <p><span className="font-semibold">Data de Emissão:</span> {dateLabel}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <table className="w-full text-sm border-collapse">
+
+                                            {/* Table matching PDF */}
+                                            <table className="w-full text-base border-collapse">
                                                 <thead>
-                                                    <tr className="bg-blue-600 text-white">
-                                                        <th className="p-2">Chegada</th>
-                                                        <th className="p-2 text-left">Colaborador</th>
-                                                        <th className="p-2">Função</th>
+                                                    <tr className="bg-[#2980b9] text-white">
+                                                        <th className="p-3 border border-black text-center font-bold">CHEGADA À OBRA</th>
+                                                        <th className="p-3 border border-black text-left font-bold">COLABORADOR</th>
+                                                        <th className="p-3 border border-black text-center font-bold">FUNÇÃO</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {emps.map((emp: any) => (
                                                         <tr key={emp.id} className="text-center">
-                                                            <td className="p-2 border border-black">{emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
+                                                            <td className="p-2 border border-black w-40">{emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
                                                             <td className="p-2 border border-black text-left">{emp.full_name}</td>
                                                             <td className="p-2 border border-black">{previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "-"}</td>
                                                         </tr>
@@ -1268,11 +1362,6 @@ export default function Relatorios() {
                                         </div>
                                     );
                                 })}
-                                <div className="break-inside-avoid">
-                                    <div className="mt-4 bg-gray-100 p-3 rounded">
-                                        <p className="font-bold">TOTAL GERAL DE COLABORADORES: {previewData.employees.length}</p>
-                                    </div>
-                                </div>
                             </div>
                         )}
 
