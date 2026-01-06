@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Plus, Loader2, Fuel, Image as ImageIcon, ExternalLink } from "lucide-react";
+import { Plus, Loader2, Fuel, Image as ImageIcon, ExternalLink, Edit, Trash2 } from "lucide-react";
 import { FuelSupply } from "@/shared/types";
 import AlertModal from "../components/AlertModal";
 import imageCompression from 'browser-image-compression';
@@ -20,7 +20,9 @@ export default function Abastecimento() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [progressMessage, setProgressMessage] = useState("");
-    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+
+    // Alert state
+    const [alertState, setAlertState] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
     // Form inputs
     const [supplyDate, setSupplyDate] = useState(new Date().toISOString().split("T")[0]);
@@ -28,24 +30,57 @@ export default function Abastecimento() {
     const [plateFile, setPlateFile] = useState<File | null>(null);
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
+    // Editing state
+    const [editingSupply, setEditingSupply] = useState<FuelSupply | null>(null);
+
     // Units for selection (if superuser)
     const [units, setUnits] = useState<{ id: number, name: string }[]>([]);
     const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
 
     useEffect(() => {
-        fetchSupplies();
         fetchUnits();
     }, [user]);
 
+    // Fetch units first, then supplies once we know which units the user can access
+    useEffect(() => {
+        if (units.length > 0 || user?.is_super_user) {
+            fetchSupplies();
+        }
+    }, [units, user]);
+
     const fetchUnits = async () => {
-        const { data } = await supabase.from("unidades").select("id, name").eq("is_active", true);
-        if (data) {
-            setUnits(data);
-            if (user?.unit_id) {
-                setSelectedUnitId(user.unit_id);
-            } else if (data.length > 0) {
-                setSelectedUnitId(data[0].id);
+        if (!user) return;
+
+        let fetchedUnits: { id: number; name: string }[] = [];
+
+        if (user.is_super_user) {
+            const { data } = await supabase.from("unidades").select("id, name").eq("is_active", true);
+            fetchedUnits = data || [];
+        } else {
+            const { data: links } = await supabase
+                .from("usuarios_unidades")
+                .select("unit_id")
+                .eq("user_id", user.id);
+
+            const linkedIds = links?.map((l: any) => l.unit_id) || [];
+
+            if (linkedIds.length > 0) {
+                const { data } = await supabase
+                    .from("unidades")
+                    .select("id, name")
+                    .in("id", linkedIds)
+                    .eq("is_active", true);
+                fetchedUnits = data || [];
             }
+        }
+
+        setUnits(fetchedUnits);
+
+        // Auto-select if only one unit
+        if (fetchedUnits.length === 1) {
+            setSelectedUnitId(fetchedUnits[0].id);
+        } else {
+            setSelectedUnitId(null);
         }
     };
 
@@ -62,9 +97,18 @@ export default function Abastecimento() {
                 .eq("is_active", true)
                 .order("supply_date", { ascending: false });
 
-            // If not superuser, filter by unit
-            if (!user?.is_super_user && user?.unit_id) {
-                query = query.eq("unit_id", user.unit_id);
+            // If not superuser, filter by user's units
+            if (!user?.is_super_user) {
+                const accessibleUnitIds = units.map(u => u.id);
+                if (accessibleUnitIds.length > 0) {
+                    query = query.in("unit_id", accessibleUnitIds);
+                } else {
+                    // If no units, show nothing or just their own? 
+                    // Usually better to show empty if no units assigned
+                    setSupplies([]);
+                    setIsLoading(false);
+                    return;
+                }
             }
 
             const { data, error } = await query;
@@ -82,6 +126,48 @@ export default function Abastecimento() {
         setKmFile(null);
         setPlateFile(null);
         setReceiptFile(null);
+        setEditingSupply(null);
+
+        // Re-apply selection logic
+        if (units.length === 1) {
+            setSelectedUnitId(units[0].id);
+        } else {
+            setSelectedUnitId(null);
+        }
+    };
+
+    const openNewModal = () => {
+        resetForm();
+        setIsModalOpen(true);
+    };
+
+    const handleEdit = (supply: FuelSupply) => {
+        setEditingSupply(supply);
+        setSupplyDate(supply.supply_date);
+        setSelectedUnitId(supply.unit_id);
+        setKmFile(null);
+        setPlateFile(null);
+        setReceiptFile(null);
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!confirm("Tem certeza que deseja excluir este abastecimento?")) return;
+
+        try {
+            const { error } = await supabase
+                .from("abastecimentos")
+                .update({ is_active: false })
+                .eq("id", id);
+
+            if (error) throw error;
+
+            setAlertState({ message: "Abastecimento excluído com sucesso!", type: "success" });
+            fetchSupplies();
+        } catch (error: any) {
+            console.error("Error deleting:", error);
+            setAlertState({ message: "Erro ao excluir: " + error.message, type: "error" });
+        }
     };
 
     const handleFileChange = (setter: (f: File | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,64 +215,84 @@ export default function Abastecimento() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validate that a unit is selected (if units are fetched)
         if (units.length > 0 && !selectedUnitId) {
-            setAlertMessage("Por favor, selecione uma unidade.");
+            setAlertState({ message: "Por favor, selecione uma unidade.", type: "error" });
             return;
         }
 
-        if (!kmFile || !plateFile || !receiptFile) {
-            setAlertMessage("Por favor, anexe todas as fotos necessárias (KM, Placa e Cupom).");
-            return;
+        // Validate photos only for new entries or if specific fields are empty during update?
+        // Actually, for update, we can keep existing URLs if verify files are missing.
+        if (!editingSupply) {
+            if (!kmFile || !plateFile || !receiptFile) {
+                setAlertState({ message: "Por favor, anexe todas as fotos necessárias (KM, Placa e Cupom).", type: "error" });
+                return;
+            }
         }
 
         setIsSubmitting(true);
-        // setProgressMessage("Salvando..."); 
 
         try {
-            setProgressMessage("Processando imagens...");
+            let kmUrl = editingSupply?.km_photo_url;
+            let plateUrl = editingSupply?.plate_photo_url;
+            let receiptUrl = editingSupply?.receipt_photo_url;
 
-            // Upload images
-            const kmUrl = await uploadImage(kmFile, `km/${selectedUnitId}`);
-            const plateUrl = await uploadImage(plateFile, `plate/${selectedUnitId}`);
-            const receiptUrl = await uploadImage(receiptFile, `receipt/${selectedUnitId}`);
+            if (kmFile || plateFile || receiptFile) {
+                setProgressMessage("Processando imagens...");
+            }
+
+            if (kmFile) kmUrl = await uploadImage(kmFile, `km/${selectedUnitId}`);
+            if (plateFile) plateUrl = await uploadImage(plateFile, `plate/${selectedUnitId}`);
+            if (receiptFile) receiptUrl = await uploadImage(receiptFile, `receipt/${selectedUnitId}`);
 
             setProgressMessage("Salvando registro...");
 
-            const { error } = await supabase.from("abastecimentos").insert({
+            const payload = {
                 unit_id: selectedUnitId,
-                user_id: user?.id,
                 supply_date: supplyDate,
                 km_photo_url: kmUrl,
                 plate_photo_url: plateUrl,
                 receipt_photo_url: receiptUrl,
-                is_active: true
-            });
+            };
 
-            if (error) throw error;
+            if (editingSupply) {
+                const { error } = await supabase
+                    .from("abastecimentos")
+                    .update(payload)
+                    .eq("id", editingSupply.id);
+                if (error) throw error;
+                setAlertState({ message: "Abastecimento atualizado com sucesso!", type: "success" });
+            } else {
+                const { error } = await supabase.from("abastecimentos").insert({
+                    ...payload,
+                    user_id: user?.id,
+                    is_active: true
+                });
+                if (error) throw error;
+                setAlertState({ message: "Abastecimento registrado com sucesso!", type: "success" });
+            }
 
             setIsModalOpen(false);
             resetForm();
-            setAlertMessage("Abastecimento registrado com sucesso!");
             fetchSupplies();
 
         } catch (error: any) {
             console.error("Error submitting:", error);
-            setAlertMessage("Erro: " + error.message);
+            setAlertState({ message: "Erro: " + error.message, type: "error" });
         } finally {
             setIsSubmitting(false);
             setProgressMessage("");
         }
     };
 
-    const PhotoLink = ({ url, label }: { url: string, label: string }) => {
-        if (!url) return <span className="text-slate-500 text-xs">-</span>;
+    const PhotoLink = ({ url, label }: { url?: string, label: string }) => {
+        if (!url) return <span className="text-slate-500 text-xs text-opacity-50 select-none cursor-not-allowed px-2 py-1 border border-slate-700 rounded bg-slate-800/50">{label} (–)</span>;
         return (
             <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 px-2 py-1 rounded"
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded hover:bg-blue-500/20 transition-colors"
+                title="Clique para ver"
             >
                 <ExternalLink className="w-3 h-3" />
                 {label}
@@ -206,7 +312,7 @@ export default function Abastecimento() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={openNewModal}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium shadow-lg shadow-blue-500/20"
                     >
                         <Plus className="w-5 h-5" />
@@ -227,8 +333,25 @@ export default function Abastecimento() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {supplies.map((item: any) => (
-                        <div key={item.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 transition-all">
-                            <div className="flex justify-between items-start mb-4">
+                        <div key={item.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 hover:border-slate-600/50 transition-all group relative">
+                            <div className="absolute top-4 right-4 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => handleEdit(item)}
+                                    className="p-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded transition-colors"
+                                    title="Editar"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(item.id)}
+                                    className="p-1.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded transition-colors"
+                                    title="Excluir"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <div className="flex justify-between items-start mb-4 pr-16">
                                 <div>
                                     <p className="text-lg font-bold text-slate-200">{formatDate(item.supply_date)}</p>
                                     <p className="text-sm text-slate-400">{item.units?.name}</p>
@@ -241,7 +364,7 @@ export default function Abastecimento() {
                             <div className="space-y-2 mt-4">
                                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comprovantes</p>
                                 <div className="flex flex-wrap gap-2">
-                                    <PhotoLink url={item.km_photo_url} label="Foto KM" />
+                                    <PhotoLink url={item.km_photo_url} label="KM" />
                                     <PhotoLink url={item.plate_photo_url} label="Placa" />
                                     <PhotoLink url={item.receipt_photo_url} label="Cupom" />
                                 </div>
@@ -254,9 +377,11 @@ export default function Abastecimento() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b border-slate-700 bg-slate-800/50">
-                            <h2 className="text-xl font-bold text-slate-100">Novo Abastecimento</h2>
+                            <h2 className="text-xl font-bold text-slate-100">
+                                {editingSupply ? "Editar Abastecimento" : "Novo Abastecimento"}
+                            </h2>
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-5">
@@ -286,9 +411,24 @@ export default function Abastecimento() {
                             </div>
 
                             <div className="space-y-4">
-                                <LabelFileInput label="Foto do KM (Painel)" file={kmFile} onChange={handleFileChange(setKmFile)} />
-                                <LabelFileInput label="Foto da Placa" file={plateFile} onChange={handleFileChange(setPlateFile)} />
-                                <LabelFileInput label="Foto do Cupom Fiscal" file={receiptFile} onChange={handleFileChange(setReceiptFile)} />
+                                <LabelFileInput
+                                    label="Foto do KM (Painel)"
+                                    file={kmFile}
+                                    onChange={handleFileChange(setKmFile)}
+                                    existingUrl={editingSupply?.km_photo_url}
+                                />
+                                <LabelFileInput
+                                    label="Foto da Placa"
+                                    file={plateFile}
+                                    onChange={handleFileChange(setPlateFile)}
+                                    existingUrl={editingSupply?.plate_photo_url}
+                                />
+                                <LabelFileInput
+                                    label="Foto do Cupom Fiscal"
+                                    file={receiptFile}
+                                    onChange={handleFileChange(setReceiptFile)}
+                                    existingUrl={editingSupply?.receipt_photo_url}
+                                />
                             </div>
 
                             <div className="flex gap-3 pt-2">
@@ -308,10 +448,10 @@ export default function Abastecimento() {
                                     {isSubmitting ? (
                                         <div className="flex items-center gap-2">
                                             <Loader2 className="animate-spin w-5 h-5" />
-                                            <span>{progressMessage || "Enviando..."}</span>
+                                            <span>{progressMessage || "Salvar"}</span>
                                         </div>
                                     ) : (
-                                        "Enviar"
+                                        editingSupply ? "Atualizar" : "Enviar"
                                     )}
                                 </button>
                             </div>
@@ -321,16 +461,17 @@ export default function Abastecimento() {
             )}
 
             <AlertModal
-                isOpen={!!alertMessage}
-                message={alertMessage || ""}
-                onClose={() => setAlertMessage(null)}
+                isOpen={!!alertState}
+                message={alertState?.message || ""}
+                onClose={() => setAlertState(null)}
+                type={alertState?.type}
             />
         </div>
     );
 }
 
 // Helper component for file inputs
-function LabelFileInput({ label, file, onChange }: { label: string, file: File | null, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+function LabelFileInput({ label, file, onChange, existingUrl }: { label: string, file: File | null, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, existingUrl?: string }) {
     return (
         <div>
             <label className="block text-sm font-medium text-slate-400 mb-1">{label}</label>
@@ -341,9 +482,16 @@ function LabelFileInput({ label, file, onChange }: { label: string, file: File |
                     onChange={onChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <div className={`flex items-center gap-3 px-3 py-2 border rounded-lg transition-colors ${file ? 'bg-blue-500/10 border-blue-500/50 text-blue-300' : 'bg-slate-950 border-slate-700 text-slate-500'}`}>
-                    <ImageIcon className="w-5 h-5 flex-shrink-0" />
-                    <span className="truncate text-sm">{file ? file.name : "Clique para selecionar foto..."}</span>
+                <div className={`flex items-center justify-between px-3 py-2 border rounded-lg transition-colors ${file ? 'bg-blue-500/10 border-blue-500/50 text-blue-300' : 'bg-slate-950 border-slate-700 text-slate-500'}`}>
+                    <div className="flex items-center gap-3 overflow-hidden">
+                        <ImageIcon className="w-5 h-5 flex-shrink-0" />
+                        <span className="truncate text-sm">
+                            {file ? file.name : (existingUrl ? "Manter foto atual (clique para alterar)" : "Clique para selecionar foto...")}
+                        </span>
+                    </div>
+                    {existingUrl && !file && (
+                        <span className="text-xs text-green-500 font-medium px-2 py-0.5 bg-green-500/10 rounded">Atual</span>
+                    )}
                 </div>
             </div>
         </div>
