@@ -4,6 +4,7 @@ import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Plus, Loader2, Fuel, Image as ImageIcon, ExternalLink } from "lucide-react";
 import { FuelSupply } from "@/shared/types";
 import AlertModal from "../components/AlertModal";
+import imageCompression from 'browser-image-compression';
 
 // Simple helper for dates
 const formatDate = (dateString: string) => {
@@ -89,6 +90,42 @@ export default function Abastecimento() {
         }
     };
 
+    const uploadImage = async (file: File, path: string) => {
+        const options = {
+            maxSizeMB: 0.3,
+            maxWidthOrHeight: 1280,
+            useWebWorker: true,
+            fileType: 'image/webp',
+            initialQuality: 0.7
+        };
+
+        try {
+            const compressedFile = await imageCompression(file, options);
+            const fileExt = 'webp';
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const filePath = `${path}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('abastecimentos')
+                .upload(filePath, compressedFile, {
+                    cacheControl: '3600',
+                    upsert: false,
+                    contentType: 'image/webp'
+                });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('abastecimentos')
+                .getPublicUrl(filePath);
+
+            return publicUrl;
+        } catch (error) {
+            console.error("Error uploading image:", error);
+            throw new Error("Falha no upload da imagem");
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -98,30 +135,51 @@ export default function Abastecimento() {
             return;
         }
 
+        if (!kmFile || !plateFile || !receiptFile) {
+            setAlertMessage("Por favor, anexe todas as fotos necessárias (KM, Placa e Cupom).");
+            return;
+        }
+
         setIsSubmitting(true);
         // setProgressMessage("Salvando..."); 
 
         try {
-            // Mock delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            setProgressMessage("Processando imagens...");
 
-            // Logic to save would go here
-            // await supabase.from("fuel_supplies").insert({...});
+            // Upload images
+            const kmUrl = await uploadImage(kmFile, `km/${selectedUnitId}`);
+            const plateUrl = await uploadImage(plateFile, `plate/${selectedUnitId}`);
+            const receiptUrl = await uploadImage(receiptFile, `receipt/${selectedUnitId}`);
+
+            setProgressMessage("Salvando registro...");
+
+            const { error } = await supabase.from("abastecimentos").insert({
+                unit_id: selectedUnitId,
+                user_id: user?.id,
+                supply_date: supplyDate,
+                km_photo_url: kmUrl,
+                plate_photo_url: plateUrl,
+                receipt_photo_url: receiptUrl,
+                is_active: true
+            });
+
+            if (error) throw error;
 
             setIsModalOpen(false);
             resetForm();
-            alert("Abastecimento registrado (Simulação - Upload desativado)!");
+            setAlertMessage("Abastecimento registrado com sucesso!");
+            fetchSupplies();
 
         } catch (error: any) {
             console.error("Error submitting:", error);
-            alert("Erro: " + error.message);
+            setAlertMessage("Erro: " + error.message);
         } finally {
             setIsSubmitting(false);
             setProgressMessage("");
         }
     };
 
-    const MegaLink = ({ url, label }: { url: string, label: string }) => {
+    const PhotoLink = ({ url, label }: { url: string, label: string }) => {
         if (!url) return <span className="text-slate-500 text-xs">-</span>;
         return (
             <a
@@ -181,11 +239,11 @@ export default function Abastecimento() {
                             </div>
 
                             <div className="space-y-2 mt-4">
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comprovantes (MEGA)</p>
+                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Comprovantes</p>
                                 <div className="flex flex-wrap gap-2">
-                                    <MegaLink url={item.km_photo_url} label="Foto KM" />
-                                    <MegaLink url={item.plate_photo_url} label="Placa" />
-                                    <MegaLink url={item.receipt_photo_url} label="Cupom" />
+                                    <PhotoLink url={item.km_photo_url} label="Foto KM" />
+                                    <PhotoLink url={item.plate_photo_url} label="Placa" />
+                                    <PhotoLink url={item.receipt_photo_url} label="Cupom" />
                                 </div>
                             </div>
                         </div>
