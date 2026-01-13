@@ -22,6 +22,7 @@ import {
   Users,
   Building2,
   UserLock,
+  RefreshCcw,
   Settings,
 } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
@@ -84,6 +85,7 @@ export default function Permissoes() {
     { key: "reports", label: "Relatórios", icon: FileText },
     { key: "meals", label: "Refeição", icon: Utensils },
     { key: "abastecimento", label: "Abastecimento", icon: Fuel },
+    { key: "devolucao", label: "Devolução", icon: RefreshCcw },
     {
       key: "purchases",
       label: "Compras",

@@ -26,6 +26,7 @@ import MovimentacaoProduto from "@/react-app/pages/MovimentacaoProduto";
 import Faxineiras from "@/react-app/pages/Faxineiras";
 import Refeicoes from "@/react-app/pages/Refeicoes";
 import Abastecimento from "@/react-app/pages/Abastecimento";
+import Devolucao from "@/react-app/pages/Devolucao";
 import Configuracoes from "@/react-app/pages/Configuracoes";
 import Layout from "@/react-app/components/Layout";
 import RotaProtegida from "@/react-app/components/ProtectedRoute";
@@ -70,6 +71,7 @@ export default function App() {
                         <Route path="cleaners" element={<Faxineiras />} />
                         <Route path="meals" element={<Refeicoes />} />
                         <Route path="abastecimento" element={<Abastecimento />} />
+                        <Route path="devolucao" element={<Devolucao />} />
                         <Route path="settings" element={<Configuracoes />} />
                     </Route>
                 </Routes>

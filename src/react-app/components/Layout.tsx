@@ -24,6 +24,7 @@ import {
     Package,
     Utensils,
     Fuel,
+    RefreshCcw,
     Settings
 } from "lucide-react";
 
@@ -93,6 +94,7 @@ export default function Layout() {
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
         { path: "/meals", icon: Utensils, label: "Refeição", key: "meals" },
         { path: "/abastecimento", icon: Fuel, label: "Abastecimento", key: "abastecimento" },
+        { path: "/devolucao", icon: RefreshCcw, label: "Devolução", key: "devolucao" },
         {
             path: "/purchases",
             icon: ShoppingCart,
