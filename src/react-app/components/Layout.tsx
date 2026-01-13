@@ -92,16 +92,16 @@ export default function Layout() {
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
         { path: "/meals", icon: Utensils, label: "Refeição", key: "meals" },
-        { path: "/abastecimento", icon: Fuel, label: "Abastecimento", key: "fuel_supply" },
+        { path: "/abastecimento", icon: Fuel, label: "Abastecimento", key: "abastecimento" },
         {
             path: "/purchases",
             icon: ShoppingCart,
             label: "Compras",
             key: "purchases",
             children: [
-                { path: "/purchases/xml", icon: Upload, label: "Lançar XML" },
-                { path: "/purchases/manual", icon: FileText, label: "Lançamento Avulso" },
-                { path: "/purchases/view", icon: FileText, label: "Visualizar Nota" },
+                { path: "/purchases/xml", icon: Upload, label: "Lançar XML", key: "purchases_xml" },
+                { path: "/purchases/manual", icon: FileText, label: "Lançamento Avulso", key: "manual_purchases" },
+                { path: "/purchases/view", icon: FileText, label: "Visualizar Nota", key: "purchases_view" },
             ],
         },
         {
@@ -110,8 +110,8 @@ export default function Layout() {
             label: "Estoque",
             key: "stock",
             children: [
-                { path: "/stock/movement", icon: Package, label: "Cadastro de Produto" },
-                { path: "/stock/product-movement", icon: Package, label: "Movimentação" },
+                { path: "/stock/movement", icon: Package, label: "Cadastro de Produto", key: "stock" },
+                { path: "/stock/product-movement", icon: Package, label: "Movimentação", key: "product_movement" },
             ],
         },
         { path: "/cleaners", icon: Users, label: "Faxineiras", key: "cleaners" },

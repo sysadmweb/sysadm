@@ -67,6 +67,7 @@ export default function ListaFuncionarios() {
         status_id: 0,
         integration_date: "",
         accommodation_id: null as number | null,
+        function_id: null as number | null,
     });
 
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
@@ -204,6 +205,7 @@ export default function ListaFuncionarios() {
                 status_id: formData.status_id,
                 integration_date: formData.integration_date || null,
                 accommodation_id: formData.accommodation_id,
+                function_id: formData.function_id,
             };
 
             const { error } = await supabase
@@ -232,6 +234,7 @@ export default function ListaFuncionarios() {
             status_id: employee.status_id,
             integration_date: employee.integration_date || "",
             accommodation_id: employee.accommodation_id,
+            function_id: employee.function_id,
         });
         setShowModal(true);
     };
@@ -481,6 +484,19 @@ export default function ListaFuncionarios() {
                                     <option value="">Nenhum</option>
                                     {accommodations.map((acc) => (
                                         <option key={acc.id} value={acc.id}>{acc.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Função</label>
+                                <select
+                                    value={formData.function_id || ""}
+                                    onChange={(e) => setFormData({ ...formData, function_id: e.target.value ? parseInt(e.target.value) : null })}
+                                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                >
+                                    <option value="">Nenhuma</option>
+                                    {functions.map((func) => (
+                                        <option key={func.id} value={func.id}>{func.name}</option>
                                     ))}
                                 </select>
                             </div>

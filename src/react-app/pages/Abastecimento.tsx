@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
+import { usePermissions } from "@/react-app/hooks/usePermissions";
 import { Plus, Loader2, Fuel, Image as ImageIcon, ExternalLink, Edit, Trash2 } from "lucide-react";
 import { FuelSupply } from "@/shared/types";
 import AlertModal from "../components/AlertModal";
@@ -15,6 +16,9 @@ const formatDate = (dateString: string) => {
 
 export default function Abastecimento() {
     const { user } = useAuth();
+    const { get } = usePermissions();
+    const canView = get("abastecimento").can_view;
+
     const [supplies, setSupplies] = useState<FuelSupply[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -299,6 +303,15 @@ export default function Abastecimento() {
             </a>
         );
     };
+
+    if (!canView) {
+        return (
+            <div className="flex flex-col items-center justify-center h-96 text-slate-400">
+                <Fuel className="w-16 h-16 mb-4 opacity-20" />
+                <p>Você não tem permissão para visualizar esta página.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

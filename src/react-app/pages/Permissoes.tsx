@@ -1,6 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/react-app/supabase";
-import { Loader2, ShieldCheck } from "lucide-react";
+import {
+  Loader2,
+  ShieldCheck,
+  ChevronRight,
+  ChevronDown,
+  LayoutDashboard,
+  UserCircle,
+  Home,
+  Briefcase,
+  Tag,
+  Activity,
+  ClipboardCheck,
+  Clock,
+  FileText,
+  Utensils,
+  Fuel,
+  ShoppingCart,
+  Upload,
+  Package,
+  Users,
+  Building2,
+  UserLock,
+  Settings,
+} from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
 type SimpleUser = {
@@ -22,6 +45,13 @@ type UserPermission = {
   is_active: boolean;
 };
 
+type PageDefinition = {
+  key: string;
+  label: string;
+  icon: any;
+  children?: PageDefinition[];
+}
+
 export default function Permissoes() {
   const { user } = useAuth();
   const [users, setUsers] = useState<SimpleUser[]>([]);
@@ -29,47 +59,69 @@ export default function Permissoes() {
   const [perms, setPerms] = useState<UserPermission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
-  const pages = useMemo(
-    () => [
-      "dashboard",
-      "employees",
-      "employees_integration",
-      "employees_list",
-      "employees_transfer",
-      "accommodations",
-      "rooms",
-      "functions",
-      "units",
-      "users",
-      "permissions",
-      "purchases",
-      "manual_purchases",
-      "categories",
-      "jornada",
-      "stock",
-    ],
-    []
-  );
+  // Define hierarchy matching Layout.tsx
+  const menuStructure: PageDefinition[] = useMemo(() => [
+    { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    {
+      key: "employees",
+      label: "Funcionários",
+      icon: UserCircle,
+      children: [
+        { key: "employees_integration", label: "Integração", icon: UserCircle },
+        { key: "employees_list", label: "Lista de funcionários", icon: UserCircle },
+        { key: "employees_transfer", label: "Transferência", icon: UserCircle },
+        { key: "employees_transfers_list", label: "Histórico de Transferências", icon: UserCircle },
+      ]
+    },
+    { key: "accommodations", label: "Alojamentos", icon: Home },
+    { key: "functions", label: "Funções", icon: Briefcase },
+    { key: "categories", label: "Categorias", icon: Tag },
+    { key: "status", label: "Status", icon: Activity },
+    { key: "inspection", label: "Vistorias", icon: ClipboardCheck },
+    { key: "jornada", label: "Jornada", icon: Clock },
+    { key: "reports", label: "Relatórios", icon: FileText },
+    { key: "meals", label: "Refeição", icon: Utensils },
+    { key: "abastecimento", label: "Abastecimento", icon: Fuel },
+    {
+      key: "purchases",
+      label: "Compras",
+      icon: ShoppingCart,
+      children: [
+        { key: "purchases_xml", label: "Lançar XML", icon: Upload },
+        { key: "manual_purchases", label: "Lançamento Avulso", icon: FileText },
+        { key: "purchases_view", label: "Visualizar Nota", icon: FileText },
+      ]
+    },
+    {
+      key: "stock",
+      label: "Estoque",
+      icon: Package,
+      children: [
+        { key: "stock", label: "Cadastro de Produto", icon: Package },
+        { key: "product_movement", label: "Movimentação", icon: Package },
+      ]
+    },
+    { key: "cleaners", label: "Faxineiras", icon: Users },
+    { key: "units", label: "Unidades", icon: Building2 },
+    { key: "users", label: "Usuários", icon: Users },
+    { key: "permissions", label: "Regras", icon: UserLock },
+    { key: "settings", label: "Configurações", icon: Settings },
+  ], []);
 
-  const pageLabels: Record<string, string> = {
-    dashboard: "Dashboard",
-    employees: "Funcionários (Menu)",
-    employees_integration: "Integração",
-    employees_list: "Lista de Funcionários",
-    employees_transfer: "Transferência",
-    accommodations: "Alojamentos",
-    rooms: "Quartos",
-    functions: "Funções",
-    units: "Unidades",
-    users: "Usuários",
-    permissions: "Regras",
-    purchases: "Compras",
-    manual_purchases: "Lançamento Avulso",
-    categories: "Categorias",
-    jornada: "Jornada",
-    stock: "Estoque",
-  };
+  // Recursively extract all page keys for loading permissions
+  const pages = useMemo(() => {
+    const list: string[] = [];
+    const traverse = (items: PageDefinition[]) => {
+      items.forEach(item => {
+        list.push(item.key);
+        if (item.children) traverse(item.children);
+      });
+    };
+    traverse(menuStructure);
+    return list;
+  }, [menuStructure]);
 
   useEffect(() => {
     const load = async () => {
@@ -101,7 +153,11 @@ export default function Permissoes() {
         .eq("is_active", true);
       const existing = Array.isArray(data) ? (data as UserPermission[]) : [];
       const byPage = new Map(existing.map((p) => [p.page, p]));
-      const normalized: UserPermission[] = pages.map((page) => {
+
+      // Use Set to avoid duplicates if keys are repeated in structure (though they shouldn't be)
+      const uniquePages = Array.from(new Set(pages));
+
+      const normalized: UserPermission[] = uniquePages.map((page) => {
         const found = byPage.get(page);
         return found ?? {
           id: 0,
@@ -119,7 +175,10 @@ export default function Permissoes() {
     loadPerms();
   }, [selectedUserId, pages]);
 
-  const updatePerm = async (idx: number, key: keyof Pick<UserPermission, "can_view" | "can_create" | "can_update" | "can_delete">, value: boolean) => {
+  const updatePerm = async (page: string, key: keyof Pick<UserPermission, "can_view" | "can_create" | "can_update" | "can_delete">, value: boolean) => {
+    const idx = perms.findIndex(p => p.page === page);
+    if (idx === -1) return;
+
     const row = perms[idx];
     const next = { ...row, [key]: value };
     const copy = [...perms];
@@ -142,6 +201,12 @@ export default function Permissoes() {
     }
   };
 
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
   if (!user?.is_super_user) {
     return <div className="flex items-center justify-center h-96 text-slate-300">Sem acesso</div>;
   }
@@ -153,6 +218,97 @@ export default function Permissoes() {
       </div>
     );
   }
+
+  // Recursive renderer for table rows
+  const renderRows = (items: PageDefinition[], level = 0) => {
+    return items.map(item => {
+      const hasChildren = item.children && item.children.length > 0;
+      const isExpanded = expandedGroups.includes(item.key);
+      const perm = perms.find(p => p.page === item.key);
+
+      // If permission object is missing (shouldn't happen due to normalization), skip
+      if (!perm) return null;
+
+      // Indentation logic
+      const paddingLeft = level * 20 + 24; // Base 24px + 20px per level
+
+      return (
+        <React.Fragment key={item.key}>
+          <tr className={`hover:bg-slate-800/30 transition-colors ${level > 0 ? "bg-slate-900/20" : ""}`}>
+            <td className="py-3 pr-6 text-slate-300" style={{ paddingLeft: `${paddingLeft}px` }}>
+              <div className="flex items-center gap-3">
+                {/* Expand Toggle or Spacer */}
+                {hasChildren ? (
+                  <button
+                    onClick={() => toggleGroup(item.key)}
+                    className="p-1 hover:bg-slate-700 rounded transition-colors"
+                  >
+                    {isExpanded ?
+                      <ChevronDown className="w-4 h-4 text-slate-400" /> :
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    }
+                  </button>
+                ) : (
+                  // If it's a child (level > 0), show a visual tree line endpoint or just space
+                  // Sidebar usually has simple indentation. We'll use a spacer that matches the button size.
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    {level > 0 && <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />}
+                  </div>
+                )}
+
+                {/* Icon */}
+                <item.icon className={`w-5 h-5 ${level === 0 ? "text-blue-400" : "text-slate-500"}`} />
+
+                {/* Label */}
+                <span className={`${level === 0 ? "font-medium text-slate-200" : "text-slate-400"}`}>
+                  {item.label}
+                </span>
+              </div>
+            </td>
+
+            {/* Checkboxes */}
+            <td className="px-6 py-3 text-center">
+              <input
+                type="checkbox"
+                checked={perm.can_view}
+                onChange={(e) => updatePerm(item.key, "can_view", e.target.checked)}
+                className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900 w-4 h-4 cursor-pointer"
+              />
+            </td>
+            <td className="px-6 py-3 text-center">
+              <input
+                type="checkbox"
+                checked={perm.can_create}
+                onChange={(e) => updatePerm(item.key, "can_create", e.target.checked)}
+                className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900 w-4 h-4 cursor-pointer"
+              />
+            </td>
+            <td className="px-6 py-3 text-center">
+              <input
+                type="checkbox"
+                checked={perm.can_update}
+                onChange={(e) => updatePerm(item.key, "can_update", e.target.checked)}
+                className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900 w-4 h-4 cursor-pointer"
+              />
+            </td>
+            <td className="px-6 py-3 text-center">
+              <input
+                type="checkbox"
+                checked={perm.can_delete}
+                onChange={(e) => updatePerm(item.key, "can_delete", e.target.checked)}
+                className="rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-slate-900 w-4 h-4 cursor-pointer"
+              />
+            </td>
+          </tr>
+
+          {/* Recursive Children Rendering */}
+          {hasChildren && isExpanded && (
+            renderRows(item.children!, level + 1)
+          )}
+        </React.Fragment>
+      );
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -182,7 +338,7 @@ export default function Permissoes() {
         </select>
       </div>
 
-      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-x-auto shadow-xl">
+      <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
         <table className="w-full">
           <thead className="bg-slate-800/50 border-b border-slate-700/50">
             <tr>
@@ -194,39 +350,7 @@ export default function Permissoes() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/50">
-            {perms.map((p, idx) => (
-              <tr key={`${p.user_id}-${p.page}`} className="hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4 text-slate-300">{pageLabels[p.page] || p.page}</td>
-                <td className="px-6 py-4 text-center">
-                  <input
-                    type="checkbox"
-                    checked={p.can_view}
-                    onChange={(e) => updatePerm(idx, "can_view", e.target.checked)}
-                  />
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <input
-                    type="checkbox"
-                    checked={p.can_create}
-                    onChange={(e) => updatePerm(idx, "can_create", e.target.checked)}
-                  />
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <input
-                    type="checkbox"
-                    checked={p.can_update}
-                    onChange={(e) => updatePerm(idx, "can_update", e.target.checked)}
-                  />
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <input
-                    type="checkbox"
-                    checked={p.can_delete}
-                    onChange={(e) => updatePerm(idx, "can_delete", e.target.checked)}
-                  />
-                </td>
-              </tr>
-            ))}
+            {renderRows(menuStructure)}
           </tbody>
         </table>
       </div>
