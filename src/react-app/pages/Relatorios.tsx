@@ -587,8 +587,6 @@ export default function Relatorios() {
         URL.revokeObjectURL(url);
     };
 
-
-
     const generateIntegrationPDF = async (data: any) => {
         const { employees, functions, statuses } = data;
         if (employees.length === 0) {
@@ -742,6 +740,70 @@ export default function Relatorios() {
         URL.revokeObjectURL(url);
     };
 
+    const generateRomaneioPDF = async () => {
+        const doc = new jsPDF();
+        const logoUrl = "/logo.png";
+        let logoDataUrl: string | null = null;
+        try {
+            const response = await fetch(logoUrl);
+            const blob = await response.blob();
+            logoDataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+        } catch (error) {
+            console.error("Error loading logo:", error);
+        }
+
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+
+        doc.setFontSize(14);
+        doc.text("CONTROLE DE ENTRADA E SAÍDA DE MATERIAIS", 105, 26, { align: "center" });
+
+        doc.setFontSize(10);
+        let currentY = 54;
+        doc.text(`Empresa:___________________`, 14, currentY);
+        doc.text("Responsável: ____________________", 110, currentY);
+        currentY += 6;
+        doc.text("Data de Entrada: ____/____/____", 14, currentY);
+        doc.text("Data de Saída: ____/____/____", 110, currentY);
+
+        const body = Array.from({ length: 25 }, () => ["", "", "", ""]);
+
+        autoTable(doc, {
+            head: [["QUANTIDADE", "UNIDADE", "DESCRIÇÃO DO MATERIAL", "DATA DE SAÍDA"]],
+            body,
+            startY: currentY + 8,
+            theme: "grid",
+            styles: { fontSize: 9, halign: "center", valign: "middle", lineColor: [0, 0, 0], lineWidth: 0.3 },
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", halign: "center", lineWidth: 0 },
+            columnStyles: {
+                0: { halign: "center", cellWidth: 25 },
+                1: { halign: "center", cellWidth: 25 },
+                2: { halign: "left", cellWidth: 100 },
+                3: { halign: "center", cellWidth: 30 }
+            }
+        });
+
+        const anyDoc: any = doc;
+        let footerY = anyDoc.lastAutoTable && anyDoc.lastAutoTable.finalY ? anyDoc.lastAutoTable.finalY + 12 : 140;
+
+        doc.line(20, footerY, 90, footerY);
+        doc.line(120, footerY, 190, footerY);
+        doc.text("RESPONSAVEL ENTRADA", 55, footerY + 5, { align: "center" });
+        doc.text("RESPONSAVEL SAÍDA", 155, footerY + 5, { align: "center" });
+
+       
+        const pdfBlob = doc.output("blob");
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "relatorio_romaneio.pdf";
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
     // --- Handlers ---
 
     const handleDownloadPDF = async () => {
@@ -771,6 +833,8 @@ export default function Relatorios() {
             } else if (selectedReport === "dds") {
                 data = await fetchDDSData();
                 await generateDDSPDF(data);
+            } else if (selectedReport === "romaneio") {
+                await generateRomaneioPDF();
             }
             showToast("Download iniciado!", "success");
         } catch (error) {
@@ -1000,6 +1064,15 @@ export default function Relatorios() {
             color: "text-indigo-400",
             bg: "bg-indigo-500/10",
             border: "border-indigo-500/20"
+        },
+        {
+            id: "romaneio",
+            title: "Romaneio de Materiais",
+            description: "Controle de entrada e saída de materiais.",
+            icon: FileDown,
+            color: "text-emerald-400",
+            bg: "bg-emerald-500/10",
+            border: "border-emerald-500/20"
         }
     ];
 
@@ -1027,7 +1100,6 @@ export default function Relatorios() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
 
-                        {/* Date input for Café da Manhã, Marmitas, DDS and Employees */}
                         {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds" || report.id === "employees") && (
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
@@ -1201,6 +1273,24 @@ export default function Relatorios() {
                                         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                                     ) : (
                                         <FileDown className="w-8 h-8 text-blue-400" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">Download PDF</span>
+                                </button>
+                            </>
+                        ) : null}
+
+                        {selectedReport === "romaneio" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Gerar PDF de controle de entrada e saída de materiais:</p>
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    disabled={loadingReport !== null}
+                                    className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                >
+                                    {loadingReport === "romaneio" ? (
+                                        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
+                                    ) : (
+                                        <FileDown className="w-8 h-8 text-emerald-400" />
                                     )}
                                     <span className="text-slate-200 font-medium">Download PDF</span>
                                 </button>
