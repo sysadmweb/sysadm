@@ -35,6 +35,16 @@ export default function Relatorios() {
     // Include all statuses for meal reports
     const [includeAllStatuses, setIncludeAllStatuses] = useState<boolean>(false);
 
+    // Initial state for employee report filters and sort
+    const [employeeFilterType, setEmployeeFilterType] = useState<"todos" | "moi" | "mod">("todos");
+    const [employeeSort, setEmployeeSort] = useState<"name" | "function">("name");
+
+
+
+    // ... (skipping unchanged code: PDF generators, etc) ...
+
+
+
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
         setTimeout(() => setToast(null), 3000);
@@ -51,6 +61,33 @@ export default function Relatorios() {
             unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
         }
         return { isSuper, unitIds };
+    };
+
+    const getSystemLogo = async (): Promise<string | null> => {
+        try {
+            // First try to get from config
+            const { data } = await supabase
+                .from("config")
+                .select("value")
+                .eq("key", "system_logo")
+                .single();
+
+            if (data?.value) {
+                return data.value;
+            }
+
+            // Fallback to default file
+            const response = await fetch("/logo.png");
+            const blob = await response.blob();
+            return await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+        } catch (error) {
+            console.error("Error loading logo:", error);
+            return null;
+        }
     };
 
     // --- Data Fetchers ---
@@ -119,6 +156,17 @@ export default function Relatorios() {
             employees = [];
         }
 
+        // Apply Function Type Filters
+        if (employeeFilterType !== "todos") {
+            employees = employees.filter(emp => {
+                const func = functions.find(f => f.id === emp.function_id);
+                if (!func) return false;
+                if (employeeFilterType === "moi" && func.type === 'MOI') return true;
+                if (employeeFilterType === "mod" && func.type === 'MOD') return true;
+                return false;
+            });
+        }
+
         // We don't filter by arrival/departure date anymore based on the new requirement, 
         // as we are filtering by specific statuses.
         // const activeEmployees = employees.filter(e => e.arrival_date && !e.departure_date);
@@ -144,17 +192,15 @@ export default function Relatorios() {
         let employeeQuery;
 
         if (includeAllStatuses) {
-            // When "TODOS" is selected, fetch employees with AGUARDANDO INTEGRAÇÃO or TRABALHANDO DISPONIVEL status
             const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
             employeeQuery = supabase.from("funcionarios")
-                .select("accommodation_id, refeicao_status_id, status_id")
+                .select("id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
                 .in("status_id", statusIds);
         } else {
-            // Original behavior: fetch employees with ALOJAMENTO refeicao_status or AGUARDANDO INTEGRAÇÃO status
             employeeQuery = supabase.from("funcionarios")
-                .select("accommodation_id, refeicao_status_id, status_id")
+                .select("id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
                 .or(`refeicao_status_id.eq.${alojId}${aguardandoId ? `,status_id.eq.${aguardandoId}` : ''}`);
@@ -169,7 +215,7 @@ export default function Relatorios() {
         if (empRes.error) throw empRes.error;
 
         let accommodations = accRes.data as Accommodation[] || [];
-        const employees = empRes.data as { accommodation_id: number, refeicao_status_id: number, status_id: number }[] || [];
+        const employees = empRes.data as Employee[] || [];
 
         if (!isSuper && unitIds.length > 0) {
             accommodations = accommodations.filter(a => unitIds.includes(a.unit_id));
@@ -178,15 +224,25 @@ export default function Relatorios() {
         }
 
         const employeeCounts: Record<number, number> = {};
+        const sizeCounts: Record<number, { P: number, M: number, G: number }> = {};
+
         employees.forEach(emp => {
             if (emp.accommodation_id) {
                 employeeCounts[emp.accommodation_id] = (employeeCounts[emp.accommodation_id] || 0) + 1;
+
+                if (!sizeCounts[emp.accommodation_id]) {
+                    sizeCounts[emp.accommodation_id] = { P: 0, M: 0, G: 0 };
+                }
+                const size = emp.tamanho_marmita as "P" | "M" | "G" | null;
+                if (size && ["P", "M", "G"].includes(size)) {
+                    sizeCounts[emp.accommodation_id][size]++;
+                }
             }
         });
 
         const accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
 
-        return { accommodations: accommodationsWithEmployees, employeeCounts };
+        return { accommodations: accommodationsWithEmployees, employeeCounts, sizeCounts };
     };
 
     const fetchCafeDaManhaData = async () => {
@@ -244,6 +300,7 @@ export default function Relatorios() {
         const { isSuper, unitIds } = await fetchUserUnits();
         let employees: Employee[] = [];
         let units: Unit[] = [];
+        let statuses: any[] = [];
 
         const { data: statusData } = await supabase
             .from("status")
@@ -253,28 +310,33 @@ export default function Relatorios() {
 
         if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
 
-        const [empRes, unitsRes] = await Promise.all([
+        const [empRes, unitsRes, statusRes] = await Promise.all([
             supabase
                 .from("funcionarios")
-                .select("id, full_name, unit_id, status_id, is_active")
+                .select("id, full_name, unit_id, status_id, is_active, function_id, accommodation_id, tamanho_marmita, refeicao_status_id")
                 .eq("is_active", true)
                 .eq("status_id", statusData.id)
                 .order("full_name"),
-            supabase.from("unidades").select("id, name").eq("is_active", true)
+            supabase.from("unidades").select("id, name").eq("is_active", true),
+            supabase.from("status").select("id, name")
         ]);
 
         if (empRes.error) throw empRes.error;
         if (unitsRes.error) throw unitsRes.error;
+        if (statusRes.error) throw statusRes.error;
 
         employees = (empRes.data || []) as Employee[];
         units = (unitsRes.data || []) as Unit[];
+        statuses = (statusRes.data || []) as any[];
 
         if (!isSuper) {
             if (unitIds.length > 0) employees = employees.filter(e => unitIds.includes(e.unit_id));
             else employees = [];
         }
 
-        return { employees, units };
+        const statusMap = new Map(statuses.map(s => [s.id, s.name]));
+
+        return { employees, units, statusMap };
     };
 
     const fetchIntegrationData = async () => {
@@ -289,22 +351,25 @@ export default function Relatorios() {
 
         if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
 
-        const [empRes, funcsRes, statusRes] = await Promise.all([
+        const [empRes, funcsRes, statusRes, unitsRes] = await Promise.all([
             supabase.from("funcionarios")
-                .select("id, full_name, arrival_date, integration_date, function_id, status_id, unit_id")
+                .select("id, full_name, arrival_date, integration_date, function_id, status_id, unit_id, tamanho_marmita, refeicao_status_id")
                 .eq("is_active", true)
                 .eq("status_id", statusData.id),
             supabase.from("funcoes").select("id, name").eq("is_active", true),
-            supabase.from("status").select("id, name").eq("is_active", true)
+            supabase.from("status").select("id, name").eq("is_active", true),
+            supabase.from("unidades").select("id, name").eq("is_active", true)
         ]);
 
         if (empRes.error) throw empRes.error;
         if (funcsRes.error) throw funcsRes.error;
         if (statusRes.error) throw statusRes.error;
+        if (unitsRes.error) throw unitsRes.error;
 
         let employees = empRes.data as Employee[] || [];
         const functions = funcsRes.data as Function[] || [];
         const statuses = statusRes.data as any[] || [];
+        const units = unitsRes.data as Unit[] || [];
 
         if (!isSuper && unitIds.length > 0) {
             employees = employees.filter(e => unitIds.includes(e.unit_id));
@@ -312,7 +377,9 @@ export default function Relatorios() {
             employees = [];
         }
 
-        return { employees, functions, statuses };
+        const statusMap = new Map(statuses.map(s => [s.id, s.name]));
+
+        return { employees, functions, statuses, statusMap, units };
     };
 
     // --- PDF Generators ---
@@ -325,7 +392,6 @@ export default function Relatorios() {
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
         const groupedLogs: Record<number, WorkLog[]> = {};
         workLogs.forEach((log: WorkLog) => {
             if (!groupedLogs[log.employee_id]) groupedLogs[log.employee_id] = [];
@@ -333,24 +399,13 @@ export default function Relatorios() {
         });
         const employeeIds = Object.keys(groupedLogs).map(Number);
 
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
-        employeeIds.forEach((empId, index) => {
+        employeeIds.forEach((empId: number, index: number) => {
             if (index > 0) doc.addPage();
             const employee = employees.find((e: Employee) => e.id === empId);
             const unit = units.find((u: Unit) => u.id === employee?.unit_id);
-            const logs = groupedLogs[empId].sort((a, b) => new Date(b.work_date).getTime() - new Date(a.work_date).getTime());
+            const logs = groupedLogs[empId].sort((a: WorkLog, b: WorkLog) => new Date(b.work_date).getTime() - new Date(a.work_date).getTime());
 
             if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
             doc.setFontSize(18);
@@ -399,7 +454,6 @@ export default function Relatorios() {
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
         const groupedEmployees: Record<number, Employee[]> = {};
         employees.forEach((emp: Employee) => {
             if (!groupedEmployees[emp.unit_id]) groupedEmployees[emp.unit_id] = [];
@@ -407,23 +461,12 @@ export default function Relatorios() {
         });
         const unitIdsToPrint = Object.keys(groupedEmployees).map(Number);
 
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         unitIdsToPrint.forEach((unitId, index) => {
             if (index > 0) doc.addPage();
             const unit = units.find((u: Unit) => u.id === unitId);
-            const unitEmployees = groupedEmployees[unitId].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+            const unitEmployees = groupedEmployees[unitId];
 
             if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
             doc.setFontSize(18);
@@ -433,26 +476,62 @@ export default function Relatorios() {
             let currentY = 30;
             const lineHeight = 6;
 
-            doc.text(`Total de Colaboradores: ${employees.length}`, startX, currentY);
+            doc.text(`Total de Colaboradores (Obra): ${unitEmployees.length}`, startX, currentY);
             currentY += lineHeight;
             doc.text(`Obra: ${unit?.name || "-"}`, startX, currentY);
             currentY += lineHeight;
             const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
             doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
-            autoTable(doc, {
-                startY: 56,
-                head: [["CHEGADA À OBRA", "COLABORADOR", "FUNÇÃO"]],
-                body: unitEmployees.map(emp => [
-                    emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
-                    emp.full_name || "-",
-                    functions.find((f: Function) => f.id === emp.function_id)?.name || "-"
-                ]),
-                theme: 'grid',
-                styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
-                headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-                columnStyles: { 0: { halign: 'center' }, 1: { halign: 'left' }, 2: { halign: 'center' } },
-            });
+            if (employeeSort === "function") {
+                // Aggregation view: Function | Count
+                const functionCounts: Record<string, number> = {};
+                unitEmployees.forEach(emp => {
+                    const funcName = functions.find((f: Function) => f.id === emp.function_id)?.name || "SEM FUNÇÃO";
+                    functionCounts[funcName] = (functionCounts[funcName] || 0) + 1;
+                });
+
+                const tableData = Object.entries(functionCounts)
+                    .map(([name, count]) => [name, count.toString()])
+                    .sort((a, b) => a[0].localeCompare(b[0]));
+
+                // Add total row
+                tableData.push(["TOTAL", unitEmployees.length.toString()]);
+
+                autoTable(doc, {
+                    startY: 56,
+                    head: [["FUNÇÃO", "QUANTIDADE"]],
+                    body: tableData,
+                    theme: 'grid',
+                    styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                    columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                    didParseCell: (data: any) => {
+                        if (data.row.index === tableData.length - 1) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.fillColor = [240, 240, 240];
+                        }
+                    },
+                });
+
+            } else {
+                // Name view (Standard list)
+                const sortedEmployees = unitEmployees.sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+                autoTable(doc, {
+                    startY: 56,
+                    head: [["CHEGADA À OBRA", "COLABORADOR", "FUNÇÃO"]],
+                    body: sortedEmployees.map(emp => [
+                        emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-",
+                        emp.full_name || "-",
+                        functions.find((f: Function) => f.id === emp.function_id)?.name || "-"
+                    ]),
+                    theme: 'grid',
+                    styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                    columnStyles: { 0: { halign: 'center' }, 1: { halign: 'left' }, 2: { halign: 'center' } },
+                });
+            }
         });
         const pdfBlob = doc.output('blob');
         const url = URL.createObjectURL(pdfBlob);
@@ -464,26 +543,14 @@ export default function Relatorios() {
     };
 
     const generateMarmitasPDF = async (data: any) => {
-        const { accommodations, employeeCounts } = data;
+        const { accommodations, employeeCounts, sizeCounts } = data;
         if (accommodations.length === 0) {
             showToast("Nenhum alojamento encontrado.", "error");
             return;
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
         doc.setFontSize(18);
@@ -493,22 +560,38 @@ export default function Relatorios() {
         let currentY = 30;
         doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
 
-        const body = accommodations.map((acc: Accommodation) => [
-            acc.name || "-",
-            (employeeCounts[acc.id] || 0).toString(),
-        ]);
+        const body = accommodations.map((acc: Accommodation) => {
+            const counts = sizeCounts[acc.id] || { P: 0, M: 0, G: 0 };
+            return [
+                acc.name || "-",
+                (employeeCounts[acc.id] || 0).toString(),
+                counts.P.toString(),
+                counts.M.toString(),
+                counts.G.toString(),
+            ];
+        });
 
         const total = accommodations.reduce((sum: number, acc: Accommodation) => sum + (employeeCounts[acc.id] || 0), 0);
-        body.push(["TOTAL", total.toString()]);
+        const totalP = accommodations.reduce((sum: number, acc: Accommodation) => sum + (sizeCounts[acc.id]?.P || 0), 0);
+        const totalM = accommodations.reduce((sum: number, acc: Accommodation) => sum + (sizeCounts[acc.id]?.M || 0), 0);
+        const totalG = accommodations.reduce((sum: number, acc: Accommodation) => sum + (sizeCounts[acc.id]?.G || 0), 0);
+
+        body.push(["TOTAL", total.toString(), totalP.toString(), totalM.toString(), totalG.toString()]);
 
         autoTable(doc, {
-            head: [["ALOJAMENTO", "MARMITAS"]],
+            head: [["ALOJAMENTO", "TOTAL", "P", "M", "G"]],
             body,
             startY: 45,
             theme: 'grid',
             styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
             headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-            columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+            columnStyles: {
+                0: { halign: 'left' },
+                1: { halign: 'center' },
+                2: { halign: 'center' },
+                3: { halign: 'center' },
+                4: { halign: 'center' },
+            },
             didParseCell: (data: any) => {
                 if (data.row.index === body.length - 1) {
                     data.cell.styles.fontStyle = 'bold';
@@ -533,19 +616,7 @@ export default function Relatorios() {
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
         doc.setFontSize(18);
@@ -588,29 +659,17 @@ export default function Relatorios() {
     };
 
     const generateIntegrationPDF = async (data: any) => {
-        const { employees, functions, statuses } = data;
+        const { employees, functions, statusMap } = data;
         if (employees.length === 0) {
             showToast("Nenhum colaborador trabalhando disponível.", "error");
             return;
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
         const date = new Date().toLocaleDateString("pt-BR");
 
         // Load logo
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         // Sort employees by arrival_date (most recent first)
         const sortedEmployees = [...employees].sort((a, b) => {
@@ -623,29 +682,39 @@ export default function Relatorios() {
         // Add header
         if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
         doc.setFontSize(18);
-        doc.text("Relatório de Integração", 50, 20);
+        doc.text("RELATÓRIO DE INTEGRAÇÃO", 50, 20);
         doc.setFontSize(11);
-        doc.text(`Data de Emissão: ${date}`, 50, 30);
+        const startX = 50;
+        let currentY = 30;
+        const lineHeight = 6;
+
+        doc.text(`Total de Colaboradores: ${employees.length}`, startX, currentY);
+        currentY += lineHeight;
+        doc.text(`Obra: -`, startX, currentY);
+        currentY += lineHeight;
+        doc.text(`Data de Emissão: ${date}`, startX, currentY);
 
         const tableData = sortedEmployees.map((emp: Employee) => [
             emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "-",
             emp.integration_date ? new Date(emp.integration_date).toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "-",
             emp.full_name,
             functions.find((f: Function) => f.id === emp.function_id)?.name || "-",
-            statuses.find((s: any) => s.id === emp.status_id)?.name || "-",
+            (emp.tamanho_marmita || "-"),
+            (emp.status_id && statusMap.get(emp.status_id) || "-"),
         ]);
 
         autoTable(doc, {
-            startY: 45,
-            head: [["CHEGADA À OBRA", "DATA INTEGRAÇÃO", "COLABORADOR", "FUNÇÃO", "STATUS"]],
+            startY: 55,
+            head: [["CHEGADA À OBRA", "DATA INTEGRAÇÃO", "COLABORADOR", "FUNÇÃO", "TAM.", "STATUS"]],
             body: tableData,
             styles: {
                 fontSize: 7,
-                cellPadding: 1.5,
+                halign: 'center',
+                valign: 'middle',
                 lineColor: [0, 0, 0],
                 lineWidth: 0.3,
-                overflow: 'ellipsize',
-                cellWidth: 'wrap'
+                cellPadding: 1.5,
+                overflow: 'ellipsize'
             },
             headStyles: {
                 fillColor: [41, 128, 185],
@@ -656,11 +725,12 @@ export default function Relatorios() {
                 minCellHeight: 8
             },
             columnStyles: {
-                0: { cellWidth: 28, halign: 'center', overflow: 'ellipsize' },
-                1: { cellWidth: 28, halign: 'center', overflow: 'ellipsize' },
-                2: { cellWidth: 'auto', halign: 'left', overflow: 'ellipsize' },
-                3: { cellWidth: 38, halign: 'center', overflow: 'ellipsize' },
-                4: { cellWidth: 42, halign: 'center', overflow: 'ellipsize' }
+                0: { cellWidth: 28, halign: 'center' },
+                1: { cellWidth: 28, halign: 'center' },
+                2: { cellWidth: 'auto', halign: 'left' },
+                3: { cellWidth: 30, halign: 'center' },
+                4: { cellWidth: 15, halign: 'center' },
+                5: { cellWidth: 30, halign: 'center' }
             }
         });
 
@@ -681,19 +751,7 @@ export default function Relatorios() {
         }
 
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         const groupedEmployees: Record<number, Employee[]> = {};
         employees.forEach((emp: Employee) => {
@@ -742,19 +800,7 @@ export default function Relatorios() {
 
     const generateRomaneioPDF = async () => {
         const doc = new jsPDF();
-        const logoUrl = "/logo.png";
-        let logoDataUrl: string | null = null;
-        try {
-            const response = await fetch(logoUrl);
-            const blob = await response.blob();
-            logoDataUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-        } catch (error) {
-            console.error("Error loading logo:", error);
-        }
+        const logoDataUrl = await getSystemLogo();
 
         if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
 
@@ -794,7 +840,7 @@ export default function Relatorios() {
         doc.text("RESPONSAVEL ENTRADA", 55, footerY + 5, { align: "center" });
         doc.text("RESPONSAVEL SAÍDA", 155, footerY + 5, { align: "center" });
 
-       
+
         const pdfBlob = doc.output("blob");
         const url = URL.createObjectURL(pdfBlob);
         const link = document.createElement("a");
@@ -862,7 +908,8 @@ export default function Relatorios() {
             else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
 
             // 2. Set Preview Data & Type with meal type and date
-            setPreviewData({ ...data, mealType, reportDate, includeAllStatuses });
+            const systemLogo = await getSystemLogo();
+            setPreviewData({ ...data, mealType, reportDate, includeAllStatuses, systemLogo });
             setPreviewType(selectedReport);
 
             // 3. Wait for render
@@ -911,7 +958,8 @@ export default function Relatorios() {
             const data = await fetchEmployeesData();
 
             // 2. Set Preview Data & Type
-            setPreviewData({ ...data, reportDate });
+            const systemLogo = await getSystemLogo();
+            setPreviewData({ ...data, reportDate, employeeSort, systemLogo }); // Pass sort option
             setPreviewType("employees");
 
             // 3. Wait for render
@@ -957,7 +1005,8 @@ export default function Relatorios() {
             const data = await fetchCafeDaManhaData();
 
             // 2. Set Preview Data & Type with date
-            setPreviewData({ ...data, reportDate });
+            const systemLogo = await getSystemLogo();
+            setPreviewData({ ...data, reportDate, systemLogo });
             setPreviewType("cafe-da-manha");
 
             // 3. Wait for render
@@ -1100,7 +1149,7 @@ export default function Relatorios() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
 
-                        {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds" || report.id === "employees") && (
+                        {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds") && (
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
                                 <input
@@ -1212,6 +1261,81 @@ export default function Relatorios() {
                         {/* Employees Report */}
                         {selectedReport === "employees" ? (
                             <>
+                                {/* Date Selection for Employees */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6 mb-6">
+                                    {/* Filtering */}
+                                    <div>
+                                        <p className="text-slate-400 text-sm mb-3 font-medium">Filtrar colaboradores:</p>
+                                        <div className="space-y-2 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={employeeFilterType === "mod"}
+                                                    onChange={() => setEmployeeFilterType("mod")}
+                                                    className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
+                                                />
+                                                <span className="text-slate-300 text-sm">MOD</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={employeeFilterType === "moi"}
+                                                    onChange={() => setEmployeeFilterType("moi")}
+                                                    className="w-4 h-4 accent-blue-500 rounded cursor-pointer"
+                                                />
+                                                <span className="text-slate-300 text-sm">MOI</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={employeeFilterType === "todos"}
+                                                    onChange={() => setEmployeeFilterType("todos")}
+                                                    className="w-4 h-4 accent-green-500 rounded cursor-pointer"
+                                                />
+                                                <span className="text-slate-300 text-sm font-medium">TODOS</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Sorting */}
+                                    <div>
+                                        <p className="text-slate-400 text-sm mb-3 font-medium">Organizar relatório por:</p>
+                                        <div className="space-y-2 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="sort"
+                                                    checked={employeeSort === "name"}
+                                                    onChange={() => setEmployeeSort("name")}
+                                                    className="w-4 h-4 accent-green-500 cursor-pointer"
+                                                />
+                                                <span className="text-slate-300 text-sm">Nome</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="sort"
+                                                    checked={employeeSort === "function"}
+                                                    onChange={() => setEmployeeSort("function")}
+                                                    className="w-4 h-4 accent-green-500 cursor-pointer"
+                                                />
+                                                <span className="text-slate-300 text-sm">Função</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <p className="text-slate-400 text-sm mb-6">Gerar PDF com lista de colaboradores ativos:</p>
                                 <button
                                     onClick={handleDownloadPDF}
@@ -1307,7 +1431,7 @@ export default function Relatorios() {
                         {/* Header for non-marmitas reports */}
                         {previewType !== "marmitas" && previewType !== "dds" && previewType !== "employees" && (
                             <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                                <img src="/logo.png" alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
+                                <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
                                 <div>
                                     <h1 className={previewType === "cafe-da-manha" ? "text-4xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
                                         {previewType === "jornada" && "Relatório de Jornada"}
@@ -1325,7 +1449,7 @@ export default function Relatorios() {
                         {previewType === "marmitas" && (
                             <div className="space-y-6">
                                 <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                                    <img src="/logo.png" alt="Logo" className="w-32 h-32 object-contain" />
+                                    <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className="w-32 h-32 object-contain" />
                                     <div>
                                         <h1 className="text-4xl font-bold text-gray-900">
                                             {previewData.mealType === "almoco" ? "Relatório de Almoço" : "Relatório de Janta"}
@@ -1415,15 +1539,66 @@ export default function Relatorios() {
                                     const unit = previewData.units.find((u: any) => u.id === Number(unitId));
                                     const dateLabel = previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
 
+                                    // Aggregation logic for preview
+                                    let tableHead, tableBody;
+
+                                    if (previewData.employeeSort === "function") {
+                                        const functionCounts: Record<string, number> = {};
+                                        emps.forEach((emp: any) => {
+                                            const funcName = previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "SEM FUNÇÃO";
+                                            functionCounts[funcName] = (functionCounts[funcName] || 0) + 1;
+                                        });
+
+                                        const sortedCounts = Object.entries(functionCounts).sort((a, b) => a[0].localeCompare(b[0]));
+
+                                        tableHead = (
+                                            <tr className="bg-[#2980b9] text-white">
+                                                <th className="p-3 border border-black text-left font-bold">FUNÇÃO</th>
+                                                <th className="p-3 border border-black text-center font-bold">QUANTIDADE</th>
+                                            </tr>
+                                        );
+
+                                        tableBody = (
+                                            <>
+                                                {sortedCounts.map(([name, count]) => (
+                                                    <tr key={name} className="text-center">
+                                                        <td className="p-2 border border-black text-left">{name}</td>
+                                                        <td className="p-2 border border-black">{count}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="text-center font-bold bg-gray-100">
+                                                    <td className="p-2 border border-black text-left">TOTAL</td>
+                                                    <td className="p-2 border border-black">{emps.length}</td>
+                                                </tr>
+                                            </>
+                                        );
+                                    } else {
+                                        // Standard list by name
+                                        tableHead = (
+                                            <tr className="bg-[#2980b9] text-white">
+                                                <th className="p-3 border border-black text-center font-bold">CHEGADA À OBRA</th>
+                                                <th className="p-3 border border-black text-left font-bold">COLABORADOR</th>
+                                                <th className="p-3 border border-black text-center font-bold">FUNÇÃO</th>
+                                            </tr>
+                                        );
+                                        tableBody = emps.map((emp: any) => (
+                                            <tr key={emp.id} className="text-center">
+                                                <td className="p-2 border border-black w-40">{emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
+                                                <td className="p-2 border border-black text-left">{emp.full_name}</td>
+                                                <td className="p-2 border border-black">{previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "-"}</td>
+                                            </tr>
+                                        ));
+                                    }
+
                                     return (
                                         <div key={unitId} className="break-inside-avoid">
                                             {/* Header matching PDF */}
                                             <div className="flex items-start gap-4 mb-6">
-                                                <img src="/logo.png" alt="Logo" className="w-24 h-24 object-contain" />
+                                                <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className="w-24 h-24 object-contain" />
                                                 <div className="pt-2">
                                                     <h1 className="text-3xl font-bold text-gray-900 mb-4">LISTA DE COLABORADORES</h1>
                                                     <div className="space-y-1 text-lg">
-                                                        <p><span className="font-semibold">Total de Colaboradores:</span> {previewData.employees.length}</p>
+                                                        <p><span className="font-semibold">Total de Colaboradores:</span> {emps.length}</p>
                                                         <p><span className="font-semibold">Obra:</span> {unit?.name || "-"}</p>
                                                         <p><span className="font-semibold">Data de Emissão:</span> {dateLabel}</p>
                                                     </div>
@@ -1433,20 +1608,10 @@ export default function Relatorios() {
                                             {/* Table matching PDF */}
                                             <table className="w-full text-base border-collapse">
                                                 <thead>
-                                                    <tr className="bg-[#2980b9] text-white">
-                                                        <th className="p-3 border border-black text-center font-bold">CHEGADA À OBRA</th>
-                                                        <th className="p-3 border border-black text-left font-bold">COLABORADOR</th>
-                                                        <th className="p-3 border border-black text-center font-bold">FUNÇÃO</th>
-                                                    </tr>
+                                                    {tableHead}
                                                 </thead>
                                                 <tbody>
-                                                    {emps.map((emp: any) => (
-                                                        <tr key={emp.id} className="text-center">
-                                                            <td className="p-2 border border-black w-40">{emp.arrival_date ? new Date(emp.arrival_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
-                                                            <td className="p-2 border border-black text-left">{emp.full_name}</td>
-                                                            <td className="p-2 border border-black">{previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "-"}</td>
-                                                        </tr>
-                                                    ))}
+                                                    {tableBody}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -1483,7 +1648,7 @@ export default function Relatorios() {
                         {previewType === "dds" && (
                             <div className="space-y-6">
                                 <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                                    <img src="/logo.png" alt="Logo" className="w-28 h-28 object-contain" />
+                                    <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className="w-28 h-28 object-contain" />
                                     <div>
                                         <h1 className="text-3xl font-bold text-gray-900">Relatório DDS</h1>
                                         <p className="text-lg text-gray-600">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
@@ -1516,6 +1681,7 @@ export default function Relatorios() {
                                         <th className="p-2 whitespace-nowrap">Data Integração</th>
                                         <th className="p-2 text-left whitespace-nowrap">Colaborador</th>
                                         <th className="p-2 whitespace-nowrap">Função</th>
+                                        <th className="p-2 whitespace-nowrap">Tam.</th>
                                         <th className="p-2 whitespace-nowrap">Status</th>
                                     </tr>
                                 </thead>
@@ -1526,7 +1692,8 @@ export default function Relatorios() {
                                             <td className="p-2 border border-black whitespace-nowrap">{emp.integration_date ? new Date(emp.integration_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "-"}</td>
                                             <td className="p-2 border border-black text-left whitespace-nowrap">{emp.full_name}</td>
                                             <td className="p-2 border border-black whitespace-nowrap">{previewData.functions.find((f: any) => f.id === emp.function_id)?.name || "-"}</td>
-                                            <td className="p-2 border border-black whitespace-nowrap">{previewData.statuses.find((s: any) => s.id === emp.status_id)?.name || "-"}</td>
+                                            <td className="p-2 border border-black whitespace-nowrap">{emp.tamanho_marmita || "-"}</td>
+                                            <td className="p-2 border border-black whitespace-nowrap">{previewData.statusMap.get(emp.status_id) || "-"}</td>
                                         </tr>
                                     ))}
                                 </tbody>

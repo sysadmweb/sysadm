@@ -62,6 +62,7 @@ export const UpdateUnitSchema = z.object({
 export const FunctionSchema = z.object({
   id: z.number(),
   name: z.string(),
+  type: z.enum(["MOI", "MOD"]).nullable().optional(),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -69,10 +70,12 @@ export const FunctionSchema = z.object({
 
 export const CreateFunctionSchema = z.object({
   name: z.string().min(1),
+  type: z.enum(["MOI", "MOD"]).nullable().optional(),
 });
 
 export const UpdateFunctionSchema = z.object({
   name: z.string().min(1).optional(),
+  type: z.enum(["MOI", "MOD"]).nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -149,12 +152,12 @@ export const EmployeeSchema = z.object({
   arrival_date: z.string().nullable(),
   departure_date: z.string().nullable(),
   integration_date: z.string().nullable().optional(),
-  observation: z.string().nullable(),
   unit_id: z.number(),
   accommodation_id: z.number().nullable(),
   status_id: z.number().nullable(),
   refeicao_status_id: z.number().nullable().optional(),
   function_id: z.number().nullable(),
+  tamanho_marmita: z.string().nullable().optional(),
   transferred_to_unit_id: z.number().nullable().optional(),
   transferred_arrival_date: z.string().nullable().optional(),
   is_active: z.boolean(),
@@ -167,11 +170,11 @@ export const CreateEmployeeSchema = z.object({
   arrival_date: z.string().nullable(),
   departure_date: z.string().nullable(),
   integration_date: z.string().nullable().optional(),
-  observation: z.string().nullable(),
   unit_id: z.number(),
   accommodation_id: z.number().nullable(),
   status_id: z.number().nullable(),
   function_id: z.number().nullable(),
+  tamanho_marmita: z.string().nullable().optional(),
 });
 
 export const UpdateEmployeeSchema = z.object({
@@ -179,12 +182,12 @@ export const UpdateEmployeeSchema = z.object({
   arrival_date: z.string().nullable().optional(),
   departure_date: z.string().nullable().optional(),
   integration_date: z.string().nullable().optional(),
-  observation: z.string().nullable().optional(),
   unit_id: z.number().optional(),
   accommodation_id: z.number().nullable().optional(),
   status_id: z.number().nullable().optional(),
   refeicao_status_id: z.number().nullable().optional(),
   function_id: z.number().nullable().optional(),
+  tamanho_marmita: z.string().nullable().optional(),
   transferred_to_unit_id: z.number().nullable().optional(),
   transferred_arrival_date: z.string().nullable().optional(),
   is_active: z.boolean().optional(),

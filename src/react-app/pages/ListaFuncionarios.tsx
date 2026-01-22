@@ -16,11 +16,11 @@ interface Employee {
     arrival_date: string | null;
     departure_date: string | null;
     integration_date: string | null;
-    observation: string | null;
     unit_id: number | null;
     accommodation_id: number | null;
     status_id: number;
     function_id: number | null;
+    tamanho_marmita: string | null;
     is_active: boolean;
     created_at: string;
     updated_at: string;
@@ -68,6 +68,7 @@ export default function ListaFuncionarios() {
         integration_date: "",
         accommodation_id: null as number | null,
         function_id: null as number | null,
+        tamanho_marmita: "" as string,
     });
 
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
@@ -124,7 +125,7 @@ export default function ListaFuncionarios() {
             const base = supabase
                 .from("funcionarios")
                 .select(
-                    "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
+                    "id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at"
                 )
                 .eq("is_active", true)
                 .in("status_id", statusIds); // Filter by statuses
@@ -206,6 +207,7 @@ export default function ListaFuncionarios() {
                 integration_date: formData.integration_date || null,
                 accommodation_id: formData.accommodation_id,
                 function_id: formData.function_id,
+                tamanho_marmita: formData.tamanho_marmita || null,
             };
 
             const { error } = await supabase
@@ -235,6 +237,7 @@ export default function ListaFuncionarios() {
             integration_date: employee.integration_date || "",
             accommodation_id: employee.accommodation_id,
             function_id: employee.function_id,
+            tamanho_marmita: employee.tamanho_marmita || "",
         });
         setShowModal(true);
     };
@@ -461,7 +464,7 @@ export default function ListaFuncionarios() {
 
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl">
+                    <div className="bg-slate-900 rounded-xl border border-slate-700 p-6 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
                         <h2 className="text-xl font-bold text-slate-100 mb-4">Editar Funcionário</h2>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
@@ -499,6 +502,29 @@ export default function ListaFuncionarios() {
                                         <option key={func.id} value={func.id}>{func.name}</option>
                                     ))}
                                 </select>
+                            </div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Tamanho da Marmita</label>
+                            <div className="flex flex-wrap gap-4">
+                                {[
+                                    { value: "P", label: "Pequena (P)" },
+                                    { value: "M", label: "Média (M)" },
+                                    { value: "G", label: "Grande (G)" },
+                                ].map((option) => (
+                                    <label key={option.value} className="inline-flex items-center gap-2 text-slate-200">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.tamanho_marmita === option.value}
+                                            onChange={() =>
+                                                setFormData({
+                                                    ...formData,
+                                                    tamanho_marmita: formData.tamanho_marmita === option.value ? "" : option.value,
+                                                })
+                                            }
+                                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500"
+                                        />
+                                        <span>{option.label}</span>
+                                    </label>
+                                ))}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
@@ -540,8 +566,9 @@ export default function ListaFuncionarios() {
                             </div>
                         </form>
                     </div>
-                </div>
-            )}
-        </div>
+                </div >
+            )
+            }
+        </div >
     );
 }

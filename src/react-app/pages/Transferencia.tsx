@@ -50,7 +50,7 @@ export default function Transferencia() {
           supabase.from("unidades").select("id, name").eq("is_active", true),
           supabase
             .from("funcionarios")
-            .select("id, full_name, unit_id, arrival_date, departure_date, status_id, observation, function_id")
+            .select("id, full_name, unit_id, arrival_date, departure_date, status_id, function_id")
             .eq("is_active", true)
             .order("full_name"),
           supabase.from("funcoes").select("id, name").eq("is_active", true)
@@ -148,13 +148,12 @@ export default function Transferencia() {
         if (insError) throw insError;
 
         // 2. Update Funcionario
-        const fmtDateTime = new Date(`${transferDate}T${transferTime}:00`).toLocaleString("pt-BR");
-        const fromUnit = units.find((u) => u.id === emp.unit_id)?.name || "-";
-        const toUnit = unit.name;
 
-        const prevObs = (emp as any).observation ? String((emp as any).observation) : "";
-        const addition = `TRANSFERÊNCIA EM ${fmtDateTime} DE ${fromUnit} PARA ${toUnit}${transferObservation ? ` | OBS: ${transferObservation.toUpperCase()}` : ""}`;
-        const newObs = [prevObs.toUpperCase(), addition].filter(Boolean).join(" | ");
+
+
+        // observation field is removed, so we won't persist this history in the employee record itself anymore
+        // or we need to decide if we want to store it elsewhere. 
+        // For now, removing the update to 'observation' column as it doesn't exist.
 
         const { error: upError } = await supabase
           .from("funcionarios")
@@ -163,7 +162,6 @@ export default function Transferencia() {
             departure_date: departureIso,
             status_id: targetStatusId,
             accommodation_id: null,
-            observation: newObs,
             transferred_to_unit_id: targetUnitId as number,
             transferred_arrival_date: arrivalIso
           })

@@ -8,7 +8,7 @@ export default function Funcoes() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingFunction, setEditingFunction] = useState<Function | null>(null);
-  const [formData, setFormData] = useState({ name: "" });
+  const [formData, setFormData] = useState<{ name: string; type?: "MOI" | "MOD" | null }>({ name: "", type: null });
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
   const showToast = (text: string, kind: "success" | "error") => {
@@ -24,7 +24,7 @@ export default function Funcoes() {
     try {
       const { data, error } = await supabase
         .from("funcoes")
-        .select("id, name, is_active, created_at, updated_at")
+        .select("id, name, type, is_active, created_at, updated_at")
         .eq("is_active", true);
       if (!error && Array.isArray(data)) {
         setFunctions(data as Function[]);
@@ -42,11 +42,11 @@ export default function Funcoes() {
     e.preventDefault();
 
     try {
-      const payload = { name: formData.name.toUpperCase() };
+      const payload = { name: formData.name.toUpperCase(), type: formData.type };
       if (editingFunction) {
         const { error } = await supabase
           .from("funcoes")
-          .update({ name: payload.name })
+          .update(payload)
           .eq("id", editingFunction.id);
         if (error) {
           showToast("Falha ao salvar função", "error");
@@ -56,7 +56,7 @@ export default function Funcoes() {
       } else {
         const { error } = await supabase
           .from("funcoes")
-          .insert({ name: payload.name, is_active: true });
+          .insert({ ...payload, is_active: true });
         if (error) {
           showToast("Falha ao cadastrar função", "error");
           return;
@@ -66,7 +66,7 @@ export default function Funcoes() {
 
       setShowModal(false);
       setEditingFunction(null);
-      setFormData({ name: "" });
+      setFormData({ name: "", type: null });
       fetchFunctions();
     } catch (error) {
       console.error("Error saving function:", error);
@@ -96,7 +96,7 @@ export default function Funcoes() {
 
   const openEditModal = (func: Function) => {
     setEditingFunction(func);
-    setFormData({ name: func.name });
+    setFormData({ name: func.name, type: func.type });
     setShowModal(true);
   };
 
@@ -126,7 +126,7 @@ export default function Funcoes() {
         <button
           onClick={() => {
             setEditingFunction(null);
-            setFormData({ name: "" });
+            setFormData({ name: "", type: null });
             setShowModal(true);
           }}
           className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/20"
@@ -161,7 +161,14 @@ export default function Funcoes() {
                 </button>
               </div>
             </div>
-            <h3 className="text-xl font-semibold text-slate-100 mb-2">{func.name}</h3>
+            <div className="mb-2">
+              <h3 className="text-xl font-semibold text-slate-100">{func.name}</h3>
+              {func.type && (
+                <span className={`text-xs px-2 py-1 rounded-full ${func.type === 'MOI' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                  {func.type}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-400">
               Criado em {new Date(func.created_at).toLocaleDateString("pt-BR")}
             </p>
@@ -189,6 +196,22 @@ export default function Funcoes() {
                   required
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Tipo
+                </label>
+                <select
+                  value={formData.type || ""}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value as "MOI" | "MOD" | null || null })}
+                  className="w-40 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                >
+                  <option value="">Selecione...</option>
+                  <option value="MOI">MOI</option>
+                  <option value="MOD">MOD</option>
+                </select>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"

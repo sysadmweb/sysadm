@@ -38,7 +38,7 @@ export default function Funcionarios() {
     arrival_date: "",
     departure_date: "",
     integration_date: "",
-    observation: "",
+    tamanho_marmita: "",
     unit_id: 0,
     accommodation_id: null as number | null,
     status_id: null as number | null,
@@ -117,7 +117,7 @@ export default function Funcionarios() {
       const base = supabase
         .from("funcionarios")
         .select(
-          "id, full_name, arrival_date, departure_date, integration_date, observation, unit_id, accommodation_id, status_id, function_id, is_active, created_at, updated_at"
+          "id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at"
         )
         .eq("is_active", true)
         .eq("status_id", statusData.id);
@@ -255,7 +255,7 @@ export default function Funcionarios() {
         arrival_date: formData.arrival_date || null,
         departure_date: formData.departure_date || null,
         integration_date: formData.integration_date || null,
-        observation: (formData.observation || "").toUpperCase(),
+        tamanho_marmita: formData.tamanho_marmita || null,
         unit_id: formData.unit_id,
         accommodation_id: formData.accommodation_id,
         status_id: statusId,
@@ -368,7 +368,7 @@ export default function Funcionarios() {
       arrival_date: "",
       departure_date: "",
       integration_date: "",
-      observation: "",
+      tamanho_marmita: "",
       unit_id: units.length === 1 ? units[0].id : 0,
       accommodation_id: null,
       status_id: defaultStatus?.id || null,
@@ -384,7 +384,7 @@ export default function Funcionarios() {
       arrival_date: employee.arrival_date || "",
       departure_date: employee.departure_date || "",
       integration_date: employee.integration_date || "",
-      observation: employee.observation || "",
+      tamanho_marmita: employee.tamanho_marmita || "",
       unit_id: employee.unit_id,
       accommodation_id: employee.accommodation_id,
       status_id: employee.status_id,
@@ -835,15 +835,29 @@ export default function Funcionarios() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Observação
-                </label>
-                <textarea
-                  value={formData.observation}
-                  onChange={(e) => setFormData({ ...formData, observation: e.target.value.toUpperCase() })}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                  rows={3}
-                />
+                <label className="block text-sm font-medium text-slate-300 mb-2">Tamanho da Marmita</label>
+                <div className="flex flex-wrap gap-4">
+                  {[
+                    { value: "P", label: "Pequena (P)" },
+                    { value: "M", label: "Média (M)" },
+                    { value: "G", label: "Grande (G)" },
+                  ].map((option) => (
+                    <label key={option.value} className="inline-flex items-center gap-2 text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={formData.tamanho_marmita === option.value}
+                        onChange={() =>
+                          setFormData({
+                            ...formData,
+                            tamanho_marmita: formData.tamanho_marmita === option.value ? "" : option.value,
+                          })
+                        }
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500"
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
