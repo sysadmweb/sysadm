@@ -79,7 +79,7 @@ export default function Configuracoes() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
-    const [openSection, setOpenSection] = useState<string | null>("personalizacao");
+    const [openSection, setOpenSection] = useState<string | null>(null);
 
     // Form states
     const [mealTargetDays, setMealTargetDays] = useState("");
