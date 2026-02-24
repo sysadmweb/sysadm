@@ -66,6 +66,7 @@ export default function ListaFuncionarios() {
         full_name: "",
         status_id: 0,
         integration_date: "",
+        arrival_date: "",
         accommodation_id: null as number | null,
         function_id: null as number | null,
         tamanho_marmita: "" as string,
@@ -205,6 +206,7 @@ export default function ListaFuncionarios() {
                 full_name: formData.full_name.toUpperCase(),
                 status_id: formData.status_id,
                 integration_date: formData.integration_date || null,
+                arrival_date: formData.arrival_date || null,
                 accommodation_id: formData.accommodation_id,
                 function_id: formData.function_id,
                 tamanho_marmita: formData.tamanho_marmita || null,
@@ -235,6 +237,7 @@ export default function ListaFuncionarios() {
             full_name: employee.full_name,
             status_id: employee.status_id,
             integration_date: employee.integration_date || "",
+            arrival_date: employee.arrival_date || "",
             accommodation_id: employee.accommodation_id,
             function_id: employee.function_id,
             tamanho_marmita: employee.tamanho_marmita || "",
@@ -546,6 +549,15 @@ export default function ListaFuncionarios() {
                                     type="date"
                                     value={formData.integration_date}
                                     onChange={(e) => setFormData({ ...formData, integration_date: e.target.value })}
+                                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Data de Chegada à Obra</label>
+                                <input
+                                    type="date"
+                                    value={formData.arrival_date}
+                                    onChange={(e) => setFormData({ ...formData, arrival_date: e.target.value })}
                                     className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                                 />
                             </div>

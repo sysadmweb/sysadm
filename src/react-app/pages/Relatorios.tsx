@@ -245,31 +245,42 @@ export default function Relatorios() {
         return { accommodations: accommodationsWithEmployees, employeeCounts, sizeCounts };
     };
 
-    const fetchCafeDaManhaData = async () => {
+    const fetchCafeDaManhaData = async (includeAllStatuses: boolean = false) => {
         const { isSuper, unitIds } = await fetchUserUnits();
 
-        // Fetch status IDs for "AGUARDANDO INTEGRAÇÃO" and "TRABALHANDO DISPONÍVEL"
-        const [aguardandoRes, trabalhandoRes] = await Promise.all([
+        // Fetch status IDs
+        const [alojRes, aguardandoRes, trabalhandoRes] = await Promise.all([
+            supabase.from("status").select("id").eq("name", "ALOJAMENTO").single(),
             supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
             supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
         ]);
 
+        const alojId = alojRes.data?.id;
         const aguardandoId = aguardandoRes.data?.id;
         const trabalhandoId = trabalhandoRes.data?.id;
-        const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
 
-        if (statusIds.length === 0) {
-            throw new Error("Required statuses not found");
-        }
+        let employeeQuery;
 
-        // Fetch employees with the specified statuses and accommodation
-        const [accRes, empRes] = await Promise.all([
-            supabase.from("alojamentos").select("*").eq("is_active", true),
-            supabase.from("funcionarios")
+        if (includeAllStatuses) {
+            const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
+            employeeQuery = supabase.from("funcionarios")
                 .select("accommodation_id, status_id")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
-                .in("status_id", statusIds)
+                .in("status_id", statusIds);
+        } else {
+            if (!alojId) throw new Error("Status 'ALOJAMENTO' not found");
+            employeeQuery = supabase.from("funcionarios")
+                .select("accommodation_id, status_id")
+                .eq("is_active", true)
+                .not("accommodation_id", "is", null)
+                .eq("refeicao_status_id", alojId);
+        }
+
+        // Fetch employees and accommodations
+        const [accRes, empRes] = await Promise.all([
+            supabase.from("alojamentos").select("*").eq("is_active", true),
+            employeeQuery
         ]);
 
         if (accRes.error) throw accRes.error;
@@ -423,18 +434,26 @@ export default function Relatorios() {
 
             autoTable(doc, {
                 startY: 55,
-                head: [["Data", "Entrada", "Saída Almoço", "Volta Almoço", "Saída"]],
+                head: [["Data", "Entrada", "Saída Almoço", "Volta Almoço", "Saída", "Observação"]],
                 body: logs.map(log => [
                     new Date(log.work_date).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
                     log.entry_time_1?.slice(0, 5) || "-",
                     log.exit_time_1?.slice(0, 5) || "-",
                     log.entry_time_2?.slice(0, 5) || "-",
-                    log.exit_time_2?.slice(0, 5) || "-"
+                    log.exit_time_2?.slice(0, 5) || "-",
+                    log.observation || "-"
                 ]),
                 theme: 'grid',
-                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
                 headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-                columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' } },
+                columnStyles: {
+                    0: { halign: 'center', cellWidth: 25 },
+                    1: { halign: 'center', cellWidth: 15 },
+                    2: { halign: 'center', cellWidth: 20 },
+                    3: { halign: 'center', cellWidth: 20 },
+                    4: { halign: 'center', cellWidth: 15 },
+                    5: { halign: 'left', cellWidth: 'auto', cellPadding: 2 }
+                },
             });
         });
         const pdfBlob = doc.output('blob');
@@ -871,7 +890,7 @@ export default function Relatorios() {
                 data = await fetchMarmitasData();
                 await generateMarmitasPDF(data);
             } else if (selectedReport === "cafe-da-manha") {
-                data = await fetchCafeDaManhaData();
+                data = await fetchCafeDaManhaData(includeAllStatuses);
                 await generateCafeDaManhaPDF(data);
             } else if (selectedReport === "integration") {
                 data = await fetchIntegrationData();
@@ -894,7 +913,7 @@ export default function Relatorios() {
 
 
 
-    const handleMealJPEG = async (mealType: "almoco" | "janta") => {
+    const handleMealJPEG = async (mealType: "almoco" | "janta" | "cafe-da-manha") => {
         if (!selectedReport) return;
         if (!reportDate) {
             showToast("Por favor, selecione uma data.", "error");
@@ -905,7 +924,7 @@ export default function Relatorios() {
             // 1. Fetch Data
             let data;
             if (selectedReport === "marmitas") data = await fetchMarmitasData(includeAllStatuses);
-            else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData();
+            else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData(includeAllStatuses);
 
             // 2. Set Preview Data & Type with meal type and date
             const systemLogo = await getSystemLogo();
@@ -994,70 +1013,7 @@ export default function Relatorios() {
         }
     };
 
-    const handleCafeDaManhaDirectJPEG = async () => {
-        if (!reportDate) {
-            showToast("Por favor, selecione uma data.", "error");
-            return;
-        }
-        setLoadingReport("cafe-da-manha");
-        try {
-            // 1. Fetch Data
-            const data = await fetchCafeDaManhaData();
-
-            // 2. Set Preview Data & Type with date
-            const systemLogo = await getSystemLogo();
-            setPreviewData({ ...data, reportDate, systemLogo });
-            setPreviewType("cafe-da-manha");
-
-            // 3. Wait for render
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // 4. Capture
-            if (previewRef.current) {
-                const canvas = await html2canvas(previewRef.current, {
-                    scale: 3,
-                    backgroundColor: "#ffffff",
-                    useCORS: true
-                });
-
-                // 5. Download
-                const link = document.createElement('a');
-                link.download = `relatorio_cafe-da-manha.jpg`;
-                link.href = canvas.toDataURL("image/jpeg", 1.0);
-                link.click();
-
-                showToast("Imagem gerada com sucesso!", "success");
-            } else {
-                throw new Error("Preview element not found");
-            }
-
-        } catch (error) {
-            console.error("Error generating JPEG:", error);
-            showToast("Erro ao gerar imagem.", "error");
-        } finally {
-            setLoadingReport(null);
-            setPreviewData(null);
-            setPreviewType(null);
-        }
-    };
-
-    const handleDDSDirectDownload = async () => {
-        if (!reportDate) {
-            showToast("Por favor, selecione uma data.", "error");
-            return;
-        }
-        setLoadingReport("dds");
-        try {
-            const data = await fetchDDSData();
-            await generateDDSPDF(data);
-            showToast("Download iniciado!", "success");
-        } catch (error) {
-            console.error("Error downloading PDF:", error);
-            showToast("Erro ao gerar PDF.", "error");
-        } finally {
-            setLoadingReport(null);
-        }
-    };
+    // --- End of Handlers ---
 
     const reports = [
         {
@@ -1164,13 +1120,7 @@ export default function Relatorios() {
 
                         <button
                             onClick={() => {
-                                if (report.id === "cafe-da-manha") {
-                                    handleCafeDaManhaDirectJPEG();
-                                } else if (report.id === "dds") {
-                                    handleDDSDirectDownload();
-                                } else {
-                                    setSelectedReport(report.id);
-                                }
+                                setSelectedReport(report.id);
                             }}
                             disabled={(loadingReport === "cafe-da-manha" && report.id === "cafe-da-manha") || (loadingReport === "dds" && report.id === "dds")}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all border border-slate-700"
@@ -1365,6 +1315,46 @@ export default function Relatorios() {
                             </>
                         ) : null}
 
+                        {/* Café da Manhã */}
+                        {selectedReport === "cafe-da-manha" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-4">Configurações do relatório:</p>
+
+                                {/* Checkbox for TODOS option */}
+                                <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeAllStatuses}
+                                            onChange={(e) => setIncludeAllStatuses(e.target.checked)}
+                                            className="w-5 h-5 accent-purple-500 cursor-pointer"
+                                        />
+                                        <div className="flex-1">
+                                            <span className="text-slate-200 font-medium">Incluir TODOS os status</span>
+                                            <p className="text-xs text-slate-400 mt-1">
+                                                Marque para incluir funcionários com status "AGUARDANDO INTEGRAÇÃO" e "TRABALHANDO DISPONIVEL"
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="flex flex-col gap-4">
+                                    <button
+                                        onClick={() => handleMealJPEG("cafe-da-manha")}
+                                        disabled={loadingReport !== null}
+                                        className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === "cafe-da-manha-cafe-da-manha" ? (
+                                            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                                        ) : (
+                                            <Image className="w-8 h-8 text-blue-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Download Imagem</span>
+                                    </button>
+                                </div>
+                            </>
+                        ) : null}
+
                         {/* Integration Report */}
                         {selectedReport === "integration" ? (
                             <>
@@ -1403,6 +1393,25 @@ export default function Relatorios() {
                             </>
                         ) : null}
 
+                        {/* DDS Report */}
+                        {selectedReport === "dds" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Gerar PDF com lista de presença para DDS:</p>
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    disabled={loadingReport !== null}
+                                    className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                >
+                                    {loadingReport === "dds" ? (
+                                        <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                                    ) : (
+                                        <FileDown className="w-8 h-8 text-indigo-400" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">Download PDF</span>
+                                </button>
+                            </>
+                        ) : null}
+
                         {selectedReport === "romaneio" ? (
                             <>
                                 <p className="text-slate-400 text-sm mb-6">Gerar PDF de controle de entrada e saída de materiais:</p>
@@ -1433,14 +1442,19 @@ export default function Relatorios() {
                             <div className="flex items-center gap-4 mb-8 border-b pb-4">
                                 <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
                                 <div>
-                                    <h1 className={previewType === "cafe-da-manha" ? "text-4xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
+                                    <h1 className={previewType === "cafe-da-manha" ? "text-6xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
                                         {previewType === "jornada" && "Relatório de Jornada"}
                                         {previewType === "employees" && "Lista de Colaboradores"}
-                                        {previewType === "cafe-da-manha" && "Relatório de Café da Manhã"}
+                                        {previewType === "cafe-da-manha" && (
+                                            <>
+                                                {"Relatório de Café da Manhã"}
+                                                {previewData.includeAllStatuses && " - TODOS"}
+                                            </>
+                                        )}
                                         {previewType === "integration" && "Relatório de Integração"}
                                         {previewType === "dds" && "Relatório DDS"}
                                     </h1>
-                                    <p className={previewType === "cafe-da-manha" ? "text-xl text-gray-500" : "text-gray-500"}>Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                                    <p className={previewType === "cafe-da-manha" ? "text-4xl font-bold text-gray-800 mt-4" : "text-gray-500"}>Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                                 </div>
                             </div>
                         )}
@@ -1451,19 +1465,19 @@ export default function Relatorios() {
                                 <div className="flex items-center gap-4 mb-8 border-b pb-4">
                                     <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className="w-32 h-32 object-contain" />
                                     <div>
-                                        <h1 className="text-4xl font-bold text-gray-900">
+                                        <h1 className="text-6xl font-bold text-gray-900">
                                             {previewData.mealType === "almoco" ? "Relatório de Almoço" : "Relatório de Janta"}
                                             {previewData.includeAllStatuses && " - TODOS"}
                                         </h1>
-                                        <p className="text-xl text-gray-500">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                                        <p className="text-4xl font-bold text-gray-800 mt-4">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                                     </div>
                                 </div>
 
-                                <table className="w-full text-xl border-collapse">
+                                <table className="w-full text-2xl border-collapse">
                                     <thead>
                                         <tr className="bg-blue-600 text-white">
-                                            <th className="p-6 text-left text-2xl">Alojamento</th>
-                                            <th className="p-6 text-2xl">
+                                            <th className="p-8 text-left text-4xl">Alojamento</th>
+                                            <th className="p-8 text-4xl text-center">
                                                 {previewData.mealType === "almoco" ? "Quantidade Almoço" : "Quantidade Janta"}
                                             </th>
                                         </tr>
@@ -1471,13 +1485,13 @@ export default function Relatorios() {
                                     <tbody>
                                         {previewData.accommodations.map((acc: any) => (
                                             <tr key={acc.id} className="text-center">
-                                                <td className="p-6 border border-black text-left text-xl">{acc.name}</td>
-                                                <td className="p-6 border border-black text-xl">{previewData.employeeCounts[acc.id] || 0}</td>
+                                                <td className="p-8 border border-black text-left text-3xl font-medium">{acc.name}</td>
+                                                <td className="p-8 border border-black text-4xl font-bold">{previewData.employeeCounts[acc.id] || 0}</td>
                                             </tr>
                                         ))}
                                         <tr className="text-center font-bold bg-gray-100">
-                                            <td className="p-6 border border-black text-left text-2xl">TOTAL</td>
-                                            <td className="p-6 border border-black text-2xl">
+                                            <td className="p-8 border border-black text-left text-5xl">TOTAL</td>
+                                            <td className="p-8 border border-black text-5xl text-center">
                                                 {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
                                             </td>
                                         </tr>
@@ -1509,6 +1523,7 @@ export default function Relatorios() {
                                                         <th className="p-2">Saída Almoço</th>
                                                         <th className="p-2">Volta Almoço</th>
                                                         <th className="p-2">Saída</th>
+                                                        <th className="p-2 text-left">Observação</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1519,6 +1534,7 @@ export default function Relatorios() {
                                                             <td className="p-2 border border-black">{log.exit_time_1?.slice(0, 5) || "-"}</td>
                                                             <td className="p-2 border border-black">{log.entry_time_2?.slice(0, 5) || "-"}</td>
                                                             <td className="p-2 border border-black">{log.exit_time_2?.slice(0, 5) || "-"}</td>
+                                                            <td className="p-2 border border-black text-left italic text-gray-700">{log.observation || "-"}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1621,23 +1637,23 @@ export default function Relatorios() {
                         )}
 
                         {previewType === "cafe-da-manha" && (
-                            <table className="w-full text-xl border-collapse">
+                            <table className="w-full text-2xl border-collapse">
                                 <thead>
                                     <tr className="bg-blue-600 text-white">
-                                        <th className="p-6 text-left text-2xl">Alojamento</th>
-                                        <th className="p-6 text-2xl">Quantidade Café da Manhã</th>
+                                        <th className="p-8 text-left text-4xl">Alojamento</th>
+                                        <th className="p-8 text-4xl text-center">Quantidade Café</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {previewData.accommodations.map((acc: any) => (
                                         <tr key={acc.id} className="text-center">
-                                            <td className="p-6 border border-black text-left text-xl">{acc.name}</td>
-                                            <td className="p-6 border border-black text-xl">{previewData.employeeCounts[acc.id] || 0}</td>
+                                            <td className="p-8 border border-black text-left text-3xl font-medium">{acc.name}</td>
+                                            <td className="p-8 border border-black text-4xl font-bold">{previewData.employeeCounts[acc.id] || 0}</td>
                                         </tr>
                                     ))}
                                     <tr className="text-center font-bold bg-gray-100">
-                                        <td className="p-6 border border-black text-left text-2xl">TOTAL</td>
-                                        <td className="p-6 border border-black text-2xl">
+                                        <td className="p-8 border border-black text-left text-5xl">TOTAL</td>
+                                        <td className="p-8 border border-black text-5xl">
                                             {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.employeeCounts[acc.id] || 0), 0)}
                                         </td>
                                     </tr>
