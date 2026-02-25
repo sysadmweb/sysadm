@@ -405,10 +405,47 @@ export default function Jornada() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* Sidebar: Calendar - Now FIRST on Mobile */}
+                <div className="lg:col-span-1 lg:order-last space-y-6">
+                    <WorkDaysCalendar
+                        selectedDate={selectedDate}
+                        onDateSelect={setSelectedDate}
+                        dayStatuses={dayStatuses}
+                    />
+
+                    <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 space-y-4 shadow-xl">
+                        <div className="flex items-center gap-2 text-slate-100 font-semibold text-sm uppercase tracking-wider">
+                            <Clock className="w-4 h-4 text-blue-400" />
+                            Resumo do Dia
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Equipe</p>
+                                <p className="text-xl font-bold text-slate-200">{filteredEmployees.length}</p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Lançados</p>
+                                <p className="text-xl font-bold text-blue-400">{Object.keys(localLogs).length}</p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">Progresso</p>
+                            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-blue-500 transition-all duration-500"
+                                    style={{ width: `${(Object.keys(localLogs).length / (employees.length || 1)) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Main Content: Employee List */}
                 <div className="lg:col-span-3 space-y-4">
 
-                    <div className="flex flex-wrap items-center gap-4 justify-between bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 shadow-lg">
+                    <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 shadow-lg space-y-4">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
                                 <Users className="w-5 h-5 text-blue-400" />
@@ -419,58 +456,74 @@ export default function Jornada() {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3">
-                            <div className="flex items-center gap-1.5 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700/50">
-                                <div className="flex items-center gap-1">
+                        <div className="flex flex-col sm:flex-row flex-wrap items-center gap-3">
+                            <div className="w-full sm:w-auto flex flex-wrap items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                                <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[8px] text-slate-500 font-bold uppercase">Entrada 1</span>
+                                        <input
+                                            type="time"
+                                            value={bulkRecord.entry_time_1 || ""}
+                                            onChange={(e) => setBulkRecord(prev => ({ ...prev, entry_time_1: e.target.value }))}
+                                            className="bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[8px] text-slate-500 font-bold uppercase">Saída 1</span>
+                                        <input
+                                            type="time"
+                                            value={bulkRecord.exit_time_1 || ""}
+                                            onChange={(e) => setBulkRecord(prev => ({ ...prev, exit_time_1: e.target.value }))}
+                                            className="bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[8px] text-slate-500 font-bold uppercase">Entrada 2</span>
+                                        <input
+                                            type="time"
+                                            value={bulkRecord.entry_time_2 || ""}
+                                            onChange={(e) => setBulkRecord(prev => ({ ...prev, entry_time_2: e.target.value }))}
+                                            className="bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[8px] text-slate-500 font-bold uppercase">Saída 2</span>
+                                        <input
+                                            type="time"
+                                            value={bulkRecord.exit_time_2 || ""}
+                                            onChange={(e) => setBulkRecord(prev => ({ ...prev, exit_time_2: e.target.value }))}
+                                            className="bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="hidden sm:block w-[1px] h-8 bg-slate-700 mx-1"></div>
+
+                                <div className="flex flex-col gap-1 w-full sm:w-40">
+                                    <span className="text-[8px] text-slate-500 font-bold uppercase">Observação</span>
                                     <input
-                                        type="time"
-                                        value={bulkRecord.entry_time_1 || ""}
-                                        onChange={(e) => setBulkRecord(prev => ({ ...prev, entry_time_1: e.target.value }))}
-                                        className="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                    />
-                                    <input
-                                        type="time"
-                                        value={bulkRecord.exit_time_1 || ""}
-                                        onChange={(e) => setBulkRecord(prev => ({ ...prev, exit_time_1: e.target.value }))}
-                                        className="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                        type="text"
+                                        placeholder="Obs Geral..."
+                                        value={bulkRecord.observation || ""}
+                                        onChange={(e) => setBulkRecord(prev => ({ ...prev, observation: e.target.value }))}
+                                        className="bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 w-full focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                                     />
                                 </div>
-                                <div className="w-[1px] h-4 bg-slate-700 mx-1"></div>
-                                <div className="flex items-center gap-1">
-                                    <input
-                                        type="time"
-                                        value={bulkRecord.entry_time_2 || ""}
-                                        onChange={(e) => setBulkRecord(prev => ({ ...prev, entry_time_2: e.target.value }))}
-                                        className="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                    />
-                                    <input
-                                        type="time"
-                                        value={bulkRecord.exit_time_2 || ""}
-                                        onChange={(e) => setBulkRecord(prev => ({ ...prev, exit_time_2: e.target.value }))}
-                                        className="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                    />
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Obs Geral..."
-                                    value={bulkRecord.observation || ""}
-                                    onChange={(e) => setBulkRecord(prev => ({ ...prev, observation: e.target.value }))}
-                                    className="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-slate-200 w-24 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                />
+
                                 <button
                                     onClick={handleBulkApply}
-                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded transition-all flex items-center gap-1.5"
+                                    className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 active:scale-95"
                                 >
-                                    <CheckSquare className="w-3 h-3" /> Aplicar
+                                    <CheckSquare className="w-4 h-4" /> Aplicar
                                 </button>
                             </div>
 
                             <button
                                 onClick={handleSaveAllVisible}
                                 disabled={loadingReport === "save-all" || filteredEmployees.length === 0}
-                                className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition-all shadow-lg shadow-green-500/20 flex items-center gap-2"
+                                className="w-full sm:w-auto px-4 py-3 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-xl transition-all shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 active:scale-95"
                             >
-                                {loadingReport === "save-all" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                {loadingReport === "save-all" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 Salvar Atuais ({filteredEmployees.length})
                             </button>
                         </div>
@@ -506,148 +559,207 @@ export default function Jornada() {
                         </div>
                     </div>
 
-                    <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-800/50 border-b border-slate-700/50">
-                                    <tr>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-700/30">Colaborador</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Entrada 1</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Saída 1</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Entrada 2</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Saída 2</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Observação</th>
-                                        <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Ação</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-700/30">
-                                    {isLoading ? (
-                                        <tr>
-                                            <td colSpan={7} className="p-12 text-center">
-                                                <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
-                                                <p className="mt-2 text-slate-500 font-medium">Carregando colaboradores...</p>
-                                            </td>
-                                        </tr>
-                                    ) : filteredEmployees.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={7} className="p-12 text-center text-slate-500 font-medium">
-                                                Nenhum colaborador encontrado nesta categoria.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredEmployees.map((emp) => {
-                                            const log = localLogs[emp.id] || {};
-                                            const isSaving = loadingReport === `save-${emp.id}`;
+                    {/* Employee View: Cards on Mobile, Table on Desktop */}
+                    <div className="space-y-4">
+                        {/* Mobile Cards */}
+                        <div className="grid grid-cols-1 gap-4 md:hidden">
+                            {isLoading ? (
+                                <div className="p-12 text-center bg-slate-900/50 rounded-xl border border-slate-700/50 shadow-xl">
+                                    <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+                                    <p className="mt-2 text-slate-500 font-medium font-bold">Carregando...</p>
+                                </div>
+                            ) : filteredEmployees.length === 0 ? (
+                                <div className="p-12 text-center bg-slate-900/50 rounded-xl border border-slate-700/50 shadow-xl text-slate-500 font-medium">
+                                    Nenhum colaborador encontrado.
+                                </div>
+                            ) : (
+                                filteredEmployees.map((emp) => {
+                                    const log = localLogs[emp.id] || {};
+                                    const isSaving = loadingReport === `save-${emp.id}`;
 
-                                            return (
-                                                <tr key={emp.id} className="hover:bg-slate-800/20 transition-colors group">
-                                                    <td className="p-4 border-r border-slate-700/30 min-w-[200px]">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-slate-200 font-medium">{emp.full_name}</span>
-                                                            <span className={`text-[10px] font-bold uppercase ${emp.category === 'MOD' ? 'text-blue-400' : 'text-purple-400'}`}>
-                                                                {emp.category || '-'}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 min-w-[100px]">
-                                                        <input
-                                                            type="time"
-                                                            value={log.entry_time_1?.slice(0, 5) || ""}
-                                                            onChange={(e) => updateLocalLog(emp.id, 'entry_time_1', e.target.value)}
-                                                            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                                        />
-                                                    </td>
-                                                    <td className="p-2 min-w-[100px]">
-                                                        <input
-                                                            type="time"
-                                                            value={log.exit_time_1?.slice(0, 5) || ""}
-                                                            onChange={(e) => updateLocalLog(emp.id, 'exit_time_1', e.target.value)}
-                                                            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                                        />
-                                                    </td>
-                                                    <td className="p-2 min-w-[100px]">
-                                                        <input
-                                                            type="time"
-                                                            value={log.entry_time_2?.slice(0, 5) || ""}
-                                                            onChange={(e) => updateLocalLog(emp.id, 'entry_time_2', e.target.value)}
-                                                            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                                        />
-                                                    </td>
-                                                    <td className="p-2 min-w-[100px]">
-                                                        <input
-                                                            type="time"
-                                                            value={log.exit_time_2?.slice(0, 5) || ""}
-                                                            onChange={(e) => updateLocalLog(emp.id, 'exit_time_2', e.target.value)}
-                                                            className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                                        />
-                                                    </td>
-                                                    <td className="p-2 min-w-[200px]">
-                                                        <div className="relative group/obs">
-                                                            <MessageSquare className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                                    return (
+                                        <div key={emp.id} className="bg-slate-900/50 rounded-xl border border-slate-700/50 p-4 shadow-lg space-y-4">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex flex-col">
+                                                    <span className="text-slate-100 font-bold text-lg">{emp.full_name}</span>
+                                                    <span className={`text-[10px] font-bold uppercase ${emp.category === 'MOD' ? 'text-blue-400' : 'text-purple-400'}`}>
+                                                        {emp.category || 'SEM CATEGORIA'}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleSaveRow(emp.id)}
+                                                    disabled={isSaving}
+                                                    className={`p-3 rounded-xl transition-all shadow-lg ${log.id
+                                                        ? "bg-slate-800 text-blue-400 border border-slate-700"
+                                                        : "bg-blue-600 text-white shadow-blue-500/20"
+                                                        } active:scale-95`}
+                                                >
+                                                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase">Entrada 1</label>
+                                                    <input
+                                                        type="time"
+                                                        value={log.entry_time_1?.slice(0, 5) || ""}
+                                                        onChange={(e) => updateLocalLog(emp.id, 'entry_time_1', e.target.value)}
+                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 text-sm focus:ring-1 focus:ring-blue-500/50"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase">Saída 1</label>
+                                                    <input
+                                                        type="time"
+                                                        value={log.exit_time_1?.slice(0, 5) || ""}
+                                                        onChange={(e) => updateLocalLog(emp.id, 'exit_time_1', e.target.value)}
+                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 text-sm focus:ring-1 focus:ring-blue-500/50"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase">Entrada 2</label>
+                                                    <input
+                                                        type="time"
+                                                        value={log.entry_time_2?.slice(0, 5) || ""}
+                                                        onChange={(e) => updateLocalLog(emp.id, 'entry_time_2', e.target.value)}
+                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 text-sm focus:ring-1 focus:ring-blue-500/50"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase">Saída 2</label>
+                                                    <input
+                                                        type="time"
+                                                        value={log.exit_time_2?.slice(0, 5) || ""}
+                                                        onChange={(e) => updateLocalLog(emp.id, 'exit_time_2', e.target.value)}
+                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-slate-100 text-sm focus:ring-1 focus:ring-blue-500/50"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="relative">
+                                                <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                                <input
+                                                    type="text"
+                                                    value={log.observation || ""}
+                                                    onChange={(e) => updateLocalLog(emp.id, 'observation', e.target.value)}
+                                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-200 text-sm focus:ring-1 focus:ring-blue-500/50"
+                                                    placeholder="Observação do dia..."
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Desktop Table */}
+                        <div className="hidden md:block bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden shadow-xl">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-800/50 border-b border-slate-700/50">
+                                        <tr>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider border-r border-slate-700/30">Colaborador</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Entrada 1</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Saída 1</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Entrada 2</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Saída 2</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Observação</th>
+                                            <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/30">
+                                        {isLoading ? (
+                                            <tr>
+                                                <td colSpan={7} className="p-12 text-center">
+                                                    <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+                                                    <p className="mt-2 text-slate-500 font-medium">Carregando colaboradores...</p>
+                                                </td>
+                                            </tr>
+                                        ) : filteredEmployees.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={7} className="p-12 text-center text-slate-500 font-medium">
+                                                    Nenhum colaborador encontrado nesta categoria.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredEmployees.map((emp) => {
+                                                const log = localLogs[emp.id] || {};
+                                                const isSaving = loadingReport === `save-${emp.id}`;
+
+                                                return (
+                                                    <tr key={emp.id} className="hover:bg-slate-800/20 transition-colors group">
+                                                        <td className="p-4 border-r border-slate-700/30 min-w-[200px]">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-slate-200 font-medium">{emp.full_name}</span>
+                                                                <span className={`text-[10px] font-bold uppercase ${emp.category === 'MOD' ? 'text-blue-400' : 'text-purple-400'}`}>
+                                                                    {emp.category || '-'}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-2 min-w-[100px]">
                                                             <input
-                                                                type="text"
-                                                                value={log.observation || ""}
-                                                                onChange={(e) => updateLocalLog(emp.id, 'observation', e.target.value)}
-                                                                className="w-full pl-8 pr-2 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-300 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                                                placeholder="Obs..."
+                                                                type="time"
+                                                                value={log.entry_time_1?.slice(0, 5) || ""}
+                                                                onChange={(e) => updateLocalLog(emp.id, 'entry_time_1', e.target.value)}
+                                                                className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                                                             />
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        <button
-                                                            onClick={() => handleSaveRow(emp.id)}
-                                                            disabled={isSaving}
-                                                            className={`p-2 rounded-lg transition-all ${log.id
-                                                                ? "bg-slate-800 text-blue-400 hover:bg-blue-500/10 border border-slate-700"
-                                                                : "bg-blue-600 text-white hover:bg-blue-500"
-                                                                } disabled:opacity-50`}
-                                                            title={log.id ? "Atualizar" : "Salvar"}
-                                                        >
-                                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Sidebar: Calendar */}
-                <div className="lg:col-span-1 space-y-6">
-                    <WorkDaysCalendar
-                        selectedDate={selectedDate}
-                        onDateSelect={setSelectedDate}
-                        dayStatuses={dayStatuses}
-                    />
-
-                    <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-slate-700/50 p-4 space-y-4 shadow-xl">
-                        <div className="flex items-center gap-2 text-slate-100 font-semibold text-sm uppercase tracking-wider">
-                            <Clock className="w-4 h-4 text-blue-400" />
-                            Resumo do Dia
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
-                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Total Equipe</p>
-                                <p className="text-xl font-bold text-slate-200">{filteredEmployees.length}</p>
-                            </div>
-                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
-                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Lançados</p>
-                                <p className="text-xl font-bold text-blue-400">{Object.keys(localLogs).length}</p>
-                            </div>
-                        </div>
-
-                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase mb-2">Progresso</p>
-                            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-blue-500 transition-all duration-500"
-                                    style={{ width: `${(Object.keys(localLogs).length / (employees.length || 1)) * 100}%` }}
-                                />
+                                                        </td>
+                                                        <td className="p-2 min-w-[100px]">
+                                                            <input
+                                                                type="time"
+                                                                value={log.exit_time_1?.slice(0, 5) || ""}
+                                                                onChange={(e) => updateLocalLog(emp.id, 'exit_time_1', e.target.value)}
+                                                                className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                                            />
+                                                        </td>
+                                                        <td className="p-2 min-w-[100px]">
+                                                            <input
+                                                                type="time"
+                                                                value={log.entry_time_2?.slice(0, 5) || ""}
+                                                                onChange={(e) => updateLocalLog(emp.id, 'entry_time_2', e.target.value)}
+                                                                className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                                            />
+                                                        </td>
+                                                        <td className="p-2 min-w-[100px]">
+                                                            <input
+                                                                type="time"
+                                                                value={log.exit_time_2?.slice(0, 5) || ""}
+                                                                onChange={(e) => updateLocalLog(emp.id, 'exit_time_2', e.target.value)}
+                                                                className="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-1.5 text-center text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                                            />
+                                                        </td>
+                                                        <td className="p-2 min-w-[200px]">
+                                                            <div className="relative group/obs">
+                                                                <MessageSquare className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                                                                <input
+                                                                    type="text"
+                                                                    value={log.observation || ""}
+                                                                    onChange={(e) => updateLocalLog(emp.id, 'observation', e.target.value)}
+                                                                    className="w-full pl-8 pr-2 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-300 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                                                    placeholder="Obs..."
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-right">
+                                                            <button
+                                                                onClick={() => handleSaveRow(emp.id)}
+                                                                disabled={isSaving}
+                                                                className={`p-2 rounded-lg transition-all ${log.id
+                                                                    ? "bg-slate-800 text-blue-400 hover:bg-blue-500/10 border border-slate-700"
+                                                                    : "bg-blue-600 text-white hover:bg-blue-500"
+                                                                    } disabled:opacity-50`}
+                                                                title={log.id ? "Atualizar" : "Salvar"}
+                                                            >
+                                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
