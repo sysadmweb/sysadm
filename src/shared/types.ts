@@ -84,6 +84,7 @@ export const AccommodationSchema = z.object({
   id: z.number(),
   name: z.string(),
   unit_id: z.number(),
+  fornecedor_id: z.number().nullable().optional(),
   bed_count: z.number().default(0),
   is_active: z.boolean(),
   created_at: z.string(),
@@ -93,12 +94,14 @@ export const AccommodationSchema = z.object({
 export const CreateAccommodationSchema = z.object({
   name: z.string().min(1),
   unit_id: z.number(),
+  fornecedor_id: z.number().nullable().optional(),
   bed_count: z.number().default(0),
 });
 
 export const UpdateAccommodationSchema = z.object({
   name: z.string().min(1).optional(),
   unit_id: z.number().optional(),
+  fornecedor_id: z.number().nullable().optional(),
   bed_count: z.number().optional(),
   is_active: z.boolean().optional(),
 });
@@ -124,6 +127,54 @@ export const UpdateRoomSchema = z.object({
   name: z.string().min(1).optional(),
   accommodation_id: z.number().optional(),
   bed_count: z.number().min(1).optional(),
+  is_active: z.boolean().optional(),
+});
+
+// Category schemas
+export const CategorySchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateCategorySchema = z.object({
+  name: z.string().min(1),
+});
+
+export const UpdateCategorySchema = z.object({
+  name: z.string().min(1).optional(),
+  is_active: z.boolean().optional(),
+});
+
+// Fornecedor (Supplier) schemas
+export const FornecedorSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  category_id: z.number().nullable(),
+  phone: z.string().nullable(),
+  responsible: z.string().nullable(),
+  observation: z.string().nullable(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const CreateFornecedorSchema = z.object({
+  name: z.string().min(1),
+  category_id: z.number().nullable(),
+  phone: z.string().nullable(),
+  responsible: z.string().nullable(),
+  observation: z.string().nullable(),
+});
+
+export const UpdateFornecedorSchema = z.object({
+  name: z.string().min(1).optional(),
+  category_id: z.number().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  responsible: z.string().nullable().optional(),
+  observation: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -224,6 +275,14 @@ export type UpdateFunctionInput = z.infer<typeof UpdateFunctionSchema>;
 export type Accommodation = z.infer<typeof AccommodationSchema>;
 export type CreateAccommodationInput = z.infer<typeof CreateAccommodationSchema>;
 export type UpdateAccommodationInput = z.infer<typeof UpdateAccommodationSchema>;
+
+export type Category = z.infer<typeof CategorySchema>;
+export type CreateCategoryInput = z.infer<typeof CreateCategorySchema>;
+export type UpdateCategoryInput = z.infer<typeof UpdateCategorySchema>;
+
+export type Fornecedor = z.infer<typeof FornecedorSchema>;
+export type CreateFornecedorInput = z.infer<typeof CreateFornecedorSchema>;
+export type UpdateFornecedorInput = z.infer<typeof UpdateFornecedorSchema>;
 
 export type Status = z.infer<typeof StatusSchema>;
 export type CreateStatusInput = z.infer<typeof CreateStatusSchema>;

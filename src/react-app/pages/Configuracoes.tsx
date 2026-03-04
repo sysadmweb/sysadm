@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/react-app/supabase";
-import { Save, Loader2, CreditCard, Image as ImageIcon, X, ChevronDown, ChevronRight, Settings } from "lucide-react";
+import { Save, Loader2, CreditCard, Image as ImageIcon, X, ChevronDown, ChevronRight, Settings, Truck } from "lucide-react";
 
 interface ConfigItem {
     id: number;
@@ -85,6 +85,12 @@ export default function Configuracoes() {
     const [mealTargetDays, setMealTargetDays] = useState("");
     const [mealStock, setMealStock] = useState("");
     const [systemLogo, setSystemLogo] = useState<string | null>(null);
+    const [controlSuppliers, setControlSuppliers] = useState(false);
+    const [supplierCategoryRefeicao, setSupplierCategoryRefeicao] = useState("");
+    const [supplierCategoryCafe, setSupplierCategoryCafe] = useState("");
+    const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+    const [selectingType, setSelectingType] = useState<"refeicao" | "cafe" | null>(null);
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -93,7 +99,13 @@ export default function Configuracoes() {
 
     useEffect(() => {
         fetchConfigs();
+        fetchCategories();
     }, []);
+
+    const fetchCategories = async () => {
+        const { data } = await supabase.from("categorias").select("id, name").order("name");
+        if (data) setCategories(data as { id: number; name: string }[]);
+    };
 
     const fetchConfigs = async () => {
         setIsLoading(true);
@@ -104,6 +116,9 @@ export default function Configuracoes() {
             setMealTargetDays(items.find(i => i.key === "meal_target_days")?.value || "0");
             setMealStock(items.find(i => i.key === "meal_stock")?.value || "0");
             setSystemLogo(items.find(i => i.key === "system_logo")?.value || null);
+            setControlSuppliers(items.find(i => i.key === "control_suppliers")?.value === "true");
+            setSupplierCategoryRefeicao(items.find(i => i.key === "supplier_category_refeicao")?.value || "");
+            setSupplierCategoryCafe(items.find(i => i.key === "supplier_category_cafe")?.value || "");
         } catch (error) {
             console.error("Error fetching configs:", error);
             showToast("Erro ao carregar configurações", "error");
@@ -135,7 +150,10 @@ export default function Configuracoes() {
             const updates = [
                 { key: "meal_target_days", value: mealTargetDays },
                 { key: "meal_stock", value: mealStock },
-                { key: "system_logo", value: systemLogo || "" }
+                { key: "system_logo", value: systemLogo || "" },
+                { key: "control_suppliers", value: String(controlSuppliers) },
+                { key: "supplier_category_refeicao", value: supplierCategoryRefeicao },
+                { key: "supplier_category_cafe", value: supplierCategoryCafe }
             ];
             for (const update of updates) {
                 const { error } = await supabase
@@ -257,7 +275,113 @@ export default function Configuracoes() {
                         </div>
                     </div>
                 </SettingSection>
+
+                <SettingSection
+                    icon={Truck}
+                    title="Controle de Fornecedores"
+                    subtitle="Gerencie restrições de entrega por fornecedor"
+                    isOpen={openSection === "fornecedores"}
+                    onToggle={() => setOpenSection(openSection === "fornecedores" ? null : "fornecedores")}
+                >
+                    <div className="space-y-6">
+                        <div className="flex items-start gap-4 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                            <div className="pt-1">
+                                <input
+                                    type="checkbox"
+                                    id="control_suppliers"
+                                    checked={controlSuppliers}
+                                    onChange={(e) => setControlSuppliers(e.target.checked)}
+                                    className="w-5 h-5 rounded border-slate-600 bg-slate-950 text-blue-500 focus:ring-blue-500/20 cursor-pointer"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="control_suppliers" className="text-slate-100 font-semibold text-lg cursor-pointer">
+                                    Entrega por Fornecedor
+                                </label>
+                                <p className="text-slate-400 mt-1 text-sm leading-relaxed">
+                                    Quando essa opção é ativada, é preciso vincular os alojamentos ao fornecedor, e selecionar o fornecedor durante a retirada do relatório.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-700/50">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-300">Categoria: Comida</label>
+                                <button
+                                    onClick={() => {
+                                        setSelectingType("refeicao");
+                                        setIsCategoryModalOpen(true);
+                                    }}
+                                    className="w-full flex items-center justify-between bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-100 hover:border-blue-500/50 transition-all text-left group"
+                                >
+                                    <span className={supplierCategoryRefeicao ? "text-slate-100" : "text-slate-500"}>
+                                        {categories.find(c => String(c.id) === supplierCategoryRefeicao)?.name || "Selecionar Categoria..."}
+                                    </span>
+                                    <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400" />
+                                </button>
+                                <p className="text-xs text-slate-500">Define o grupo de fornecedores para Almoço e Janta.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-300">Categoria: Café</label>
+                                <button
+                                    onClick={() => {
+                                        setSelectingType("cafe");
+                                        setIsCategoryModalOpen(true);
+                                    }}
+                                    className="w-full flex items-center justify-between bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-100 hover:border-blue-500/50 transition-all text-left group"
+                                >
+                                    <span className={supplierCategoryCafe ? "text-slate-100" : "text-slate-500"}>
+                                        {categories.find(c => String(c.id) === supplierCategoryCafe)?.name || "Selecionar Categoria..."}
+                                    </span>
+                                    <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400" />
+                                </button>
+                                <p className="text-xs text-slate-500">Define o grupo de fornecedores para Café da Manhã.</p>
+                            </div>
+                        </div>
+                    </div>
+                </SettingSection>
             </div>
+
+            {/* Category Selection Modal */}
+            {isCategoryModalOpen && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
+                        <div className="p-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/50">
+                            <h3 className="font-bold text-slate-100">
+                                Selecionar Categoria {selectingType === "refeicao" ? "(Comida)" : "(Café)"}
+                            </h3>
+                            <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-2 max-h-[400px] overflow-y-auto">
+                            <div className="grid grid-cols-1 gap-1">
+                                {categories.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => {
+                                            if (selectingType === "refeicao") setSupplierCategoryRefeicao(String(cat.id));
+                                            else setSupplierCategoryCafe(String(cat.id));
+                                            setIsCategoryModalOpen(false);
+                                        }}
+                                        className="w-full flex items-center px-4 py-3 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition-all text-left group"
+                                    >
+                                        <div className={`w-2 h-2 rounded-full mr-3 transition-all ${(selectingType === "refeicao" ? supplierCategoryRefeicao : supplierCategoryCafe) === String(cat.id)
+                                                ? "bg-blue-500 shadow-lg shadow-blue-500/50"
+                                                : "bg-slate-700 group-hover:bg-slate-600"
+                                            }`} />
+                                        <span className="font-medium">{cat.name}</span>
+                                    </button>
+                                ))}
+                                {categories.length === 0 && (
+                                    <p className="text-center py-8 text-slate-500">Nenhuma categoria encontrada.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="mt-12 bg-slate-900/60 backdrop-blur-2xl rounded-2xl border border-slate-700/50 p-5 shadow-2xl flex justify-end items-center gap-4">
                 <p className="text-xs text-slate-500 mr-auto hidden md:block italic">As alterações serão aplicadas globalmente nos relatórios e cálculos.</p>

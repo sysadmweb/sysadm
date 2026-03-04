@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/react-app/supabase";
 import { Employee, Unit, Accommodation, Function } from "@/shared/types";
 import { useAuth } from "@/react-app/contexts/AuthContext";
@@ -19,6 +19,13 @@ type WorkLog = {
     created_at: string;
 };
 
+type Adicional = {
+    id: number;
+    nome: string;
+    quantidade_marmita: number;
+    ativo: boolean;
+};
+
 export default function Relatorios() {
     const { user: currentUser } = useAuth();
     const [loadingReport, setLoadingReport] = useState<string | null>(null);
@@ -35,6 +42,13 @@ export default function Relatorios() {
     // Include all statuses for meal reports
     const [includeAllStatuses, setIncludeAllStatuses] = useState<boolean>(false);
 
+    // Supplier control (for Café da Manhã)
+    const [controlSuppliers, setControlSuppliers] = useState(false);
+    const [marmitaSuppliers, setMarmitaSuppliers] = useState<{ id: number; name: string }[]>([]);
+    const [cafeSuppliers, setCafeSuppliers] = useState<{ id: number; name: string }[]>([]);
+    const [selectedCafeSupplier, setSelectedCafeSupplier] = useState<number | null>(null);
+    const [selectedMarmitaSupplier, setSelectedMarmitaSupplier] = useState<number | null>(null);
+
     // Initial state for employee report filters and sort
     const [employeeFilterType, setEmployeeFilterType] = useState<"todos" | "moi" | "mod">("todos");
     const [employeeSort, setEmployeeSort] = useState<"name" | "function">("name");
@@ -50,15 +64,63 @@ export default function Relatorios() {
         setTimeout(() => setToast(null), 3000);
     };
 
+    // Load config and suppliers once
+    useEffect(() => {
+        (async () => {
+            const { data: configs } = await supabase.from("config").select("key, value");
+            if (!configs) return;
+
+            const enabled = configs.find(c => c.key === "control_suppliers")?.value === "true";
+            const mealCatId = configs.find(c => c.key === "supplier_category_refeicao")?.value;
+            const cafeCatId = configs.find(c => c.key === "supplier_category_cafe")?.value;
+
+            setControlSuppliers(enabled);
+
+            if (enabled) {
+                // Fetch Meal Suppliers
+                if (mealCatId) {
+                    const { data: mSups } = await supabase
+                        .from("fornecedores")
+                        .select("id, name")
+                        .eq("category_id", Number(mealCatId))
+                        .eq("is_active", true)
+                        .order("name");
+                    if (mSups) setMarmitaSuppliers(mSups);
+                }
+
+                // Fetch Cafe Suppliers
+                if (cafeCatId) {
+                    const { data: cSups } = await supabase
+                        .from("fornecedores")
+                        .select("id, name")
+                        .eq("category_id", Number(cafeCatId))
+                        .eq("is_active", true)
+                        .order("name");
+                    if (cSups) setCafeSuppliers(cSups);
+                }
+            }
+        })();
+    }, []);
+
     const fetchUserUnits = async () => {
         const isSuper = currentUser?.is_super_user;
         let unitIds: number[] = [];
         if (!isSuper && currentUser?.id) {
+            // First, include the unit_id from the user profile if it exists
+            if (currentUser.unit_id) {
+                unitIds.push(currentUser.unit_id);
+            }
+
+            // Then, fetch additional units linked in the join table
             const { data: links } = await supabase
                 .from("usuarios_unidades")
                 .select("unit_id")
                 .eq("user_id", currentUser.id);
-            unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+            if (Array.isArray(links)) {
+                links.forEach(l => {
+                    if (!unitIds.includes(l.unit_id)) unitIds.push(l.unit_id);
+                });
+            }
         }
         return { isSuper, unitIds };
     };
@@ -206,16 +268,19 @@ export default function Relatorios() {
                 .or(`refeicao_status_id.eq.${alojId}${aguardandoId ? `,status_id.eq.${aguardandoId}` : ''}`);
         }
 
-        const [accRes, empRes] = await Promise.all([
+        const [accRes, empRes, adsRes] = await Promise.all([
             supabase.from("alojamentos").select("*").eq("is_active", true),
-            employeeQuery
+            employeeQuery,
+            supabase.from("adicionais").select("*").eq("ativo", true).order("nome")
         ]);
 
         if (accRes.error) throw accRes.error;
         if (empRes.error) throw empRes.error;
+        if (adsRes.error) throw adsRes.error;
 
         let accommodations = accRes.data as Accommodation[] || [];
         const employees = empRes.data as Employee[] || [];
+        const adicionais = adsRes.data as Adicional[] || [];
 
         if (!isSuper && unitIds.length > 0) {
             accommodations = accommodations.filter(a => unitIds.includes(a.unit_id));
@@ -242,7 +307,18 @@ export default function Relatorios() {
 
         const accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
 
-        return { accommodations: accommodationsWithEmployees, employeeCounts, sizeCounts };
+        // Filter by supplier if selected
+        let finalAccommodations = accommodationsWithEmployees;
+        if (selectedMarmitaSupplier) {
+            const { data: pivotRows } = await supabase
+                .from("alojamentos_fornecedores")
+                .select("alojamento_id")
+                .eq("fornecedor_id", selectedMarmitaSupplier);
+            const allowedIds = new Set((pivotRows || []).map((r: any) => r.alojamento_id));
+            finalAccommodations = accommodationsWithEmployees.filter(a => allowedIds.has(a.id));
+        }
+
+        return { accommodations: finalAccommodations, employeeCounts, sizeCounts, adicionais };
     };
 
     const fetchCafeDaManhaData = async (includeAllStatuses: boolean = false) => {
@@ -277,17 +353,20 @@ export default function Relatorios() {
                 .eq("refeicao_status_id", alojId);
         }
 
-        // Fetch employees and accommodations
-        const [accRes, empRes] = await Promise.all([
+        // Fetch employees, accommodations and adicionais
+        const [accRes, empRes, adsRes] = await Promise.all([
             supabase.from("alojamentos").select("*").eq("is_active", true),
-            employeeQuery
+            employeeQuery,
+            supabase.from("adicionais").select("*").eq("ativo", true).order("nome")
         ]);
 
         if (accRes.error) throw accRes.error;
         if (empRes.error) throw empRes.error;
+        if (adsRes.error) throw adsRes.error;
 
         let accommodations = accRes.data as Accommodation[] || [];
         const employees = empRes.data as { accommodation_id: number, status_id: number }[] || [];
+        const adicionais = adsRes.data as Adicional[] || [];
 
         if (!isSuper && unitIds.length > 0) {
             accommodations = accommodations.filter(a => unitIds.includes(a.unit_id));
@@ -302,10 +381,97 @@ export default function Relatorios() {
             }
         });
 
-        const accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
+        let accommodationsWithEmployees = accommodations.filter(acc => (employeeCounts[acc.id] || 0) > 0);
 
-        return { accommodations: accommodationsWithEmployees, employeeCounts };
+        // If supplier filter is active, filter by linked accommodations
+        if (selectedCafeSupplier) {
+            const { data: pivotRows } = await supabase
+                .from("alojamentos_fornecedores")
+                .select("alojamento_id")
+                .eq("fornecedor_id", selectedCafeSupplier);
+            const allowedIds = new Set((pivotRows || []).map((r: any) => r.alojamento_id));
+            accommodationsWithEmployees = accommodationsWithEmployees.filter(a => allowedIds.has(a.id));
+        }
+
+        return { accommodations: accommodationsWithEmployees, employeeCounts, adicionais };
     };
+
+    const fetchLancheData = async (includeAllStatuses: boolean = false) => {
+        const { isSuper, unitIds } = await fetchUserUnits();
+
+        // Fetch status IDs
+        const { data: allStatuses } = await supabase.from("status").select("id, name");
+        const sts = allStatuses || [];
+        const alojResId = sts.find(s => s.name.toUpperCase() === "ALOJAMENTO")?.id;
+        const obraResId = sts.find(s => s.name.toUpperCase() === "OBRA")?.id;
+        const aguardandoId = sts.find(s => s.name.toUpperCase() === "AGUARDANDO INTEGRAÇÃO")?.id;
+        const trabalhandoId = sts.find(s => s.name.toUpperCase() === "TRABALHANDO DISPONIVEL")?.id;
+
+        let employeeQuery = supabase.from("funcionarios")
+            .select("unit_id, accommodation_id, status_id, refeicao_status_id")
+            .eq("is_active", true);
+
+        if (includeAllStatuses) {
+            const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
+            employeeQuery = employeeQuery.in("status_id", statusIds);
+        } else {
+            const mealStatusIds = [alojResId, obraResId].filter(Boolean);
+            employeeQuery = employeeQuery.in("refeicao_status_id", mealStatusIds);
+        }
+
+        const [accRes, unitsRes, empRes, adsRes] = await Promise.all([
+            supabase.from("alojamentos").select("*").eq("is_active", true),
+            supabase.from("unidades").select("*").eq("is_active", true),
+            employeeQuery,
+            supabase.from("adicionais").select("*").eq("ativo", true).order("nome")
+        ]);
+
+        if (accRes.error) throw accRes.error;
+        if (unitsRes.error) throw unitsRes.error;
+        if (empRes.error) throw empRes.error;
+        if (adsRes.error) throw adsRes.error;
+
+        let accommodations = accRes.data as Accommodation[] || [];
+        let units = unitsRes.data as Unit[] || [];
+        const employees = empRes.data as { unit_id: number, accommodation_id: number, status_id: number, refeicao_status_id: number }[] || [];
+        const adicionais = adsRes.data as Adicional[] || [];
+
+        if (!isSuper && unitIds.length > 0) {
+            accommodations = accommodations.filter(a => unitIds.includes(a.unit_id));
+            units = units.filter(u => unitIds.includes(u.id));
+        } else if (!isSuper && unitIds.length === 0) {
+            accommodations = [];
+            units = [];
+        }
+
+        const accommodationCounts: Record<number, number> = {};
+        const unitCounts: Record<number, number> = {};
+
+        employees.forEach(emp => {
+            if (emp.refeicao_status_id === alojResId) {
+                if (emp.accommodation_id) {
+                    accommodationCounts[emp.accommodation_id] = (accommodationCounts[emp.accommodation_id] || 0) + 1;
+                }
+            } else if (emp.refeicao_status_id === obraResId) {
+                if (emp.unit_id) {
+                    unitCounts[emp.unit_id] = (unitCounts[emp.unit_id] || 0) + 1;
+                }
+            } else if (includeAllStatuses) {
+                // If including all, and not explicitly ALOJ/OBRA meal status, default to unit if no acc
+                if (emp.accommodation_id) {
+                    accommodationCounts[emp.accommodation_id] = (accommodationCounts[emp.accommodation_id] || 0) + 1;
+                } else if (emp.unit_id) {
+                    unitCounts[emp.unit_id] = (unitCounts[emp.unit_id] || 0) + 1;
+                }
+            }
+        });
+
+        const filteredAccs = accommodations.filter(acc => (accommodationCounts[acc.id] || 0) > 0);
+        const filteredUnits = units.filter(unit => (unitCounts[unit.id] || 0) > 0);
+
+        return { accommodations: filteredAccs, accommodationCounts, units: filteredUnits, unitCounts, adicionais };
+    };
+
 
     const fetchDDSData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
@@ -618,6 +784,43 @@ export default function Relatorios() {
                 }
             },
         });
+
+        currentY = (doc as any).lastAutoTable.finalY + 15;
+
+        // Tabela de Adicionais
+        if (data.adicionais && data.adicionais.length > 0) {
+            const adsBody = data.adicionais.map((ad: any) => [
+                ad.nome || "-",
+                ad.quantidade_marmita.toString()
+            ]);
+            const totalAds = data.adicionais.reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+            adsBody.push(["TOTAL ADICIONAIS", totalAds.toString()]);
+
+            autoTable(doc, {
+                head: [["ITEM", "QUANTIDADE MARMITA EQUIVALENTE"]],
+                body: adsBody,
+                startY: currentY,
+                theme: 'grid',
+                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === adsBody.length - 1) {
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+            currentY = (doc as any).lastAutoTable.finalY + 20;
+        }
+
+        const totalMarmita = accommodations.reduce((sum: number, acc: any) => sum + (employeeCounts[acc.id] || 0), 0);
+        const totalAds = (data.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+        const grandTotal = totalMarmita + totalAds;
+
+        doc.setFontSize(24);
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL | ${grandTotal}`, 105, currentY, { align: "center" });
+
         const pdfBlob = doc.output('blob');
         const url = URL.createObjectURL(pdfBlob);
         const link = document.createElement('a');
@@ -668,6 +871,43 @@ export default function Relatorios() {
                 }
             },
         });
+
+        currentY = (doc as any).lastAutoTable.finalY + 15;
+
+        // Tabela de Adicionais
+        if (data.adicionais && data.adicionais.length > 0) {
+            const adsBody = data.adicionais.map((ad: any) => [
+                ad.nome || "-",
+                ad.quantidade_marmita.toString()
+            ]);
+            const totalAds = data.adicionais.reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+            adsBody.push(["TOTAL ADICIONAIS", totalAds.toString()]);
+
+            autoTable(doc, {
+                head: [["ITEM", "QUANTIDADE MARMITA EQUIVALENTE"]],
+                body: adsBody,
+                startY: currentY,
+                theme: 'grid',
+                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === adsBody.length - 1) {
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+            currentY = (doc as any).lastAutoTable.finalY + 20;
+        }
+
+        const totalCafe = accommodations.reduce((sum: number, acc: any) => sum + (employeeCounts[acc.id] || 0), 0);
+        const totalAds = (data.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+        const grandTotal = totalCafe + totalAds;
+
+        doc.setFontSize(24);
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL | ${grandTotal}`, 105, currentY, { align: "center" });
+
         const pdfBlob = doc.output('blob');
         const url = URL.createObjectURL(pdfBlob);
         const link = document.createElement('a');
@@ -676,6 +916,127 @@ export default function Relatorios() {
         link.click();
         URL.revokeObjectURL(url);
     };
+
+    const generateLanchePDF = async (data: any) => {
+        const { accommodations, accommodationCounts, units, unitCounts } = data;
+        if (accommodations.length === 0 && units.length === 0) {
+            showToast("Nenhum dado encontrado para o relatório.", "error");
+            return;
+        }
+
+        const doc = new jsPDF();
+        const logoDataUrl = await getSystemLogo();
+
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+        doc.setFontSize(18);
+        doc.text("Relatório de Lanche", 50, 20);
+        doc.setFontSize(11);
+        const startX = 50;
+        let currentY = 30;
+        doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+
+        currentY = 45;
+
+        // Tabela de Alojamento
+        if (accommodations.length > 0) {
+            const body = accommodations.map((acc: Accommodation) => [
+                acc.name || "-",
+                (accommodationCounts[acc.id] || 0).toString(),
+            ]);
+
+            const total = accommodations.reduce((sum: number, acc: Accommodation) => sum + (accommodationCounts[acc.id] || 0), 0);
+            body.push(["TOTAL ALOJAMENTO", total.toString()]);
+
+            autoTable(doc, {
+                head: [["ALOJAMENTO", "LANCHE"]],
+                body,
+                startY: currentY,
+                theme: 'grid',
+                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === body.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+            currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
+
+        // Tabela de Obra
+        if (units.length > 0) {
+            const body = units.map((unit: Unit) => [
+                unit.name || "-",
+                (unitCounts[unit.id] || 0).toString(),
+            ]);
+
+            const total = units.reduce((sum: number, unit: Unit) => sum + (unitCounts[unit.id] || 0), 0);
+            body.push(["TOTAL OBRA", total.toString()]);
+
+            autoTable(doc, {
+                head: [["OBRA", "LANCHE"]],
+                body,
+                startY: currentY,
+                theme: 'grid',
+                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                headStyles: { fillColor: [39, 174, 96], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === body.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+            currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
+
+        // Tabela de Adicionais
+        if (data.adicionais && data.adicionais.length > 0) {
+            const adsBody = data.adicionais.map((ad: any) => [
+                ad.nome || "-",
+                ad.quantidade_marmita.toString()
+            ]);
+            const totalAds = data.adicionais.reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+            adsBody.push(["TOTAL ADICIONAIS", totalAds.toString()]);
+
+            autoTable(doc, {
+                head: [["ITEM", "QUANTIDADE MARMITA EQUIVALENTE"]],
+                body: adsBody,
+                startY: currentY,
+                theme: 'grid',
+                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+                headStyles: { fillColor: [44, 62, 80], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
+                didParseCell: (data: any) => {
+                    if (data.row.index === adsBody.length - 1) {
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+            currentY = (doc as any).lastAutoTable.finalY + 20;
+        }
+
+        const totalAloj = accommodations.reduce((sum: number, acc: any) => sum + (accommodationCounts[acc.id] || 0), 0);
+        const totalObra = units.reduce((sum: number, unit: any) => sum + (unitCounts[unit.id] || 0), 0);
+        const totalAds = (data.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
+        const grandTotal = totalAloj + totalObra + totalAds;
+
+        doc.setFontSize(24);
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL | ${grandTotal}`, 105, currentY, { align: "center" });
+
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'relatorio_lanche.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
 
     const generateIntegrationPDF = async (data: any) => {
         const { employees, functions, statusMap } = data;
@@ -887,11 +1248,14 @@ export default function Relatorios() {
                 data = await fetchEmployeesData();
                 await generateEmployeesPDF(data, reportDate);
             } else if (selectedReport === "marmitas") {
-                data = await fetchMarmitasData();
+                data = await fetchMarmitasData(includeAllStatuses);
                 await generateMarmitasPDF(data);
             } else if (selectedReport === "cafe-da-manha") {
                 data = await fetchCafeDaManhaData(includeAllStatuses);
                 await generateCafeDaManhaPDF(data);
+            } else if (selectedReport === "lanche") {
+                data = await fetchLancheData(includeAllStatuses);
+                await generateLanchePDF(data);
             } else if (selectedReport === "integration") {
                 data = await fetchIntegrationData();
                 await generateIntegrationPDF(data);
@@ -913,7 +1277,7 @@ export default function Relatorios() {
 
 
 
-    const handleMealJPEG = async (mealType: "almoco" | "janta" | "cafe-da-manha") => {
+    const handleMealJPEG = async (mealType: "almoco" | "janta" | "cafe-da-manha" | "lanche") => {
         if (!selectedReport) return;
         if (!reportDate) {
             showToast("Por favor, selecione uma data.", "error");
@@ -925,6 +1289,7 @@ export default function Relatorios() {
             let data;
             if (selectedReport === "marmitas") data = await fetchMarmitasData(includeAllStatuses);
             else if (selectedReport === "cafe-da-manha") data = await fetchCafeDaManhaData(includeAllStatuses);
+            else if (selectedReport === "lanche") data = await fetchLancheData(includeAllStatuses);
 
             // 2. Set Preview Data & Type with meal type and date
             const systemLogo = await getSystemLogo();
@@ -944,7 +1309,11 @@ export default function Relatorios() {
 
                 // 5. Download
                 const link = document.createElement('a');
-                const reportName = selectedReport === "marmitas" ? "marmitas" : "cafe-da-manha";
+                let reportName = "";
+                if (selectedReport === "marmitas") reportName = "marmitas";
+                else if (selectedReport === "cafe-da-manha") reportName = "cafe-da-manha";
+                else if (selectedReport === "lanche") reportName = "lanche";
+
                 const suffix = includeAllStatuses ? "_todos" : "";
                 link.download = `relatorio_${reportName}_${mealType}${suffix}.jpg`;
                 link.href = canvas.toDataURL("image/jpeg", 1.0);
@@ -1078,6 +1447,15 @@ export default function Relatorios() {
             color: "text-emerald-400",
             bg: "bg-emerald-500/10",
             border: "border-emerald-500/20"
+        },
+        {
+            id: "lanche",
+            title: "Relatório de Lanche",
+            description: "Contagem de lanche por alojamento e obra.",
+            icon: Utensils,
+            color: "text-yellow-400",
+            bg: "bg-yellow-500/10",
+            border: "border-yellow-500/20"
         }
     ];
 
@@ -1105,7 +1483,7 @@ export default function Relatorios() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
 
-                        {(report.id === "cafe-da-manha" || report.id === "marmitas" || report.id === "dds") && (
+                        {(report.id === "cafe-da-manha" || report.id === "lanche" || report.id === "marmitas" || report.id === "dds") && (
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
                                 <input
@@ -1117,6 +1495,7 @@ export default function Relatorios() {
                                 />
                             </div>
                         )}
+
 
                         <button
                             onClick={() => {
@@ -1177,13 +1556,38 @@ export default function Relatorios() {
                                     </label>
                                 </div>
 
+                                {/* Supplier filter for Marmitas */}
+                                {controlSuppliers && marmitaSuppliers.length > 0 && (
+                                    <div className="mb-6 p-4 bg-slate-800/50 border border-purple-500/30 rounded-lg">
+                                        <p className="text-slate-300 text-sm font-medium mb-3">Selecione o Fornecedor:</p>
+                                        <div className="space-y-2">
+                                            {marmitaSuppliers.map(s => (
+                                                <label key={s.id} className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="marmita-supplier"
+                                                        value={s.id}
+                                                        checked={selectedMarmitaSupplier === s.id}
+                                                        onChange={() => setSelectedMarmitaSupplier(s.id)}
+                                                        className="w-4 h-4 accent-purple-500 cursor-pointer"
+                                                    />
+                                                    <span className="text-slate-200 text-sm">{s.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        {selectedMarmitaSupplier === null && (
+                                            <p className="text-amber-400 text-xs mt-2">⚠ Selecione um fornecedor para filtrar o relatório.</p>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
                                         onClick={() => handleMealJPEG("almoco")}
                                         disabled={loadingReport !== null}
                                         className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
                                     >
-                                        {loadingReport === selectedReport + "-almoco" ? (
+                                        {loadingReport === "marmitas-almoco" ? (
                                             <Loader2 className="w-8 h-8 text-yellow-400 animate-spin" />
                                         ) : (
                                             <Sun className="w-8 h-8 text-yellow-400" />
@@ -1196,7 +1600,7 @@ export default function Relatorios() {
                                         disabled={loadingReport !== null}
                                         className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
                                     >
-                                        {loadingReport === selectedReport + "-janta" ? (
+                                        {loadingReport === "marmitas-janta" ? (
                                             <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
                                         ) : (
                                             <Moon className="w-8 h-8 text-indigo-400" />
@@ -1204,6 +1608,18 @@ export default function Relatorios() {
                                         <span className="text-slate-200 font-medium">Janta</span>
                                     </button>
                                 </div>
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    disabled={loadingReport !== null}
+                                    className="w-full mt-4 flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                >
+                                    {loadingReport === "marmitas" ? (
+                                        <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+                                    ) : (
+                                        <FileDown className="w-8 h-8 text-orange-400" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">Download PDF (Geral)</span>
+                                </button>
                             </>
                         ) : null}
 
@@ -1315,10 +1731,35 @@ export default function Relatorios() {
                             </>
                         ) : null}
 
-                        {/* Café da Manhã */}
-                        {selectedReport === "cafe-da-manha" ? (
+                        {/* Café da Manhã & Lanche */}
+                        {(selectedReport === "cafe-da-manha" || selectedReport === "lanche") ? (
                             <>
                                 <p className="text-slate-400 text-sm mb-4">Configurações do relatório:</p>
+
+                                {/* Supplier radio buttons — only if config is enabled and it's café */}
+                                {controlSuppliers && selectedReport === "cafe-da-manha" && cafeSuppliers.length > 0 && (
+                                    <div className="mb-4 p-4 bg-slate-800/50 border border-purple-500/30 rounded-lg">
+                                        <p className="text-slate-300 text-sm font-medium mb-3">Selecione o Fornecedor:</p>
+                                        <div className="space-y-2">
+                                            {cafeSuppliers.map(s => (
+                                                <label key={s.id} className="flex items-center gap-3 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="cafe-supplier"
+                                                        value={s.id}
+                                                        checked={selectedCafeSupplier === s.id}
+                                                        onChange={() => setSelectedCafeSupplier(s.id)}
+                                                        className="w-4 h-4 accent-purple-500 cursor-pointer"
+                                                    />
+                                                    <span className="text-slate-200 text-sm">{s.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        {selectedCafeSupplier === null && (
+                                            <p className="text-amber-400 text-xs mt-2">⚠ Selecione um fornecedor para filtrar o relatório.</p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Checkbox for TODOS option */}
                                 <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
@@ -1340,11 +1781,11 @@ export default function Relatorios() {
 
                                 <div className="flex flex-col gap-4">
                                     <button
-                                        onClick={() => handleMealJPEG("cafe-da-manha")}
+                                        onClick={() => handleMealJPEG(selectedReport === "cafe-da-manha" ? "cafe-da-manha" : "lanche")}
                                         disabled={loadingReport !== null}
                                         className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
                                     >
-                                        {loadingReport === "cafe-da-manha-cafe-da-manha" ? (
+                                        {loadingReport === selectedReport + "-" + (selectedReport === "cafe-da-manha" ? "cafe-da-manha" : "lanche") ? (
                                             <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                                         ) : (
                                             <Image className="w-8 h-8 text-blue-400" />
@@ -1429,20 +1870,53 @@ export default function Relatorios() {
                                 </button>
                             </>
                         ) : null}
+
+                        {selectedReport === "janta-lanche" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Selecione o formato para JANTA - LANCHE:</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        onClick={handleDownloadPDF}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === "janta-lanche" ? (
+                                            <Loader2 className="w-8 h-8 text-red-400 animate-spin" />
+                                        ) : (
+                                            <FileDown className="w-8 h-8 text-red-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">PDF</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleMealJPEG("janta")}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === "janta-lanche-janta" ? (
+                                            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                                        ) : (
+                                            <Image className="w-8 h-8 text-blue-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">Imagem</span>
+                                    </button>
+                                </div>
+                            </>
+                        ) : null}
                     </div>
                 </div>
             )}
 
             {/* Hidden Preview Area for HTML2Canvas */}
-            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className={`${previewType === "cafe-da-manha" || previewType === "marmitas" ? "w-[1600px]" : "w-[1200px]"} bg-white text-black ${previewType === "cafe-da-manha" || previewType === "marmitas" ? "p-12" : "p-8"}`} ref={previewRef}>
+            <div style={{ position: "absolute", left: "-9999px", top: 0 }} className={`${previewType === "cafe-da-manha" || previewType === "lanche" || previewType === "marmitas" ? "w-[1600px]" : "w-[1200px]"} bg-white text-black ${previewType === "cafe-da-manha" || previewType === "lanche" || previewType === "marmitas" ? "p-12" : "p-8"}`} ref={previewRef}>
                 {previewData && (
                     <div className="space-y-6">
                         {/* Header for non-marmitas reports */}
                         {previewType !== "marmitas" && previewType !== "dds" && previewType !== "employees" && (
                             <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                                <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className={previewType === "cafe-da-manha" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
+                                <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className={previewType === "cafe-da-manha" || previewType === "lanche" ? "w-32 h-32 object-contain" : "w-20 h-20 object-contain"} />
                                 <div>
-                                    <h1 className={previewType === "cafe-da-manha" ? "text-6xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
+                                    <h1 className={previewType === "cafe-da-manha" || previewType === "lanche" ? "text-6xl font-bold text-gray-900" : "text-2xl font-bold text-gray-900"}>
                                         {previewType === "jornada" && "Relatório de Jornada"}
                                         {previewType === "employees" && "Lista de Colaboradores"}
                                         {previewType === "cafe-da-manha" && (
@@ -1451,28 +1925,33 @@ export default function Relatorios() {
                                                 {previewData.includeAllStatuses && " - TODOS"}
                                             </>
                                         )}
+                                        {previewType === "lanche" && (
+                                            <>
+                                                {"Relatório de Lanche"}
+                                                {previewData.includeAllStatuses && " - TODOS"}
+                                            </>
+                                        )}
                                         {previewType === "integration" && "Relatório de Integração"}
                                         {previewType === "dds" && "Relatório DDS"}
                                     </h1>
-                                    <p className={previewType === "cafe-da-manha" ? "text-4xl font-bold text-gray-800 mt-4" : "text-gray-500"}>Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
+                                    <p className={previewType === "cafe-da-manha" || previewType === "lanche" ? "text-4xl font-bold text-gray-800 mt-4" : "text-gray-500"}>Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                                 </div>
                             </div>
                         )}
 
-                        {/* Marmitas Report (Custom Header + Table) */}
+                        {/* Marmitas Report */}
                         {previewType === "marmitas" && (
                             <div className="space-y-6">
                                 <div className="flex items-center gap-4 mb-8 border-b pb-4">
                                     <img src={previewData.systemLogo || "/logo.png"} alt="Logo" className="w-32 h-32 object-contain" />
                                     <div>
                                         <h1 className="text-6xl font-bold text-gray-900">
-                                            {previewData.mealType === "almoco" ? "Relatório de Almoço" : "Relatório de Janta"}
+                                            {(previewData.mealType === "almoco" ? "Relatório de Almoço" : "Relatório de Janta")}
                                             {previewData.includeAllStatuses && " - TODOS"}
                                         </h1>
                                         <p className="text-4xl font-bold text-gray-800 mt-4">Emitido em: {previewData.reportDate ? new Date(previewData.reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}</p>
                                     </div>
                                 </div>
-
                                 <table className="w-full text-2xl border-collapse">
                                     <thead>
                                         <tr className="bg-blue-600 text-white">
@@ -1659,6 +2138,73 @@ export default function Relatorios() {
                                     </tr>
                                 </tbody>
                             </table>
+                        )}
+
+                        {previewType === "lanche" && (
+                            <div className="space-y-10">
+                                {previewData.accommodations.length > 0 && (
+                                    <div>
+                                        <table className="w-full text-2xl border-collapse">
+                                            <thead>
+                                                <tr className="bg-blue-600 text-white">
+                                                    <th className="p-8 text-left text-4xl">Alojamento</th>
+                                                    <th className="p-8 text-4xl text-center">Quantidade Lanche</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.accommodations.map((acc: any) => (
+                                                    <tr key={acc.id} className="text-center">
+                                                        <td className="p-8 border border-black text-left text-3xl font-medium">{acc.name}</td>
+                                                        <td className="p-8 border border-black text-4xl font-bold">{previewData.accommodationCounts[acc.id] || 0}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="text-center font-bold bg-gray-100">
+                                                    <td className="p-8 border border-black text-left text-5xl">TOTAL ALOJAMENTO</td>
+                                                    <td className="p-8 border border-black text-5xl">
+                                                        {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.accommodationCounts[acc.id] || 0), 0)}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {previewData.units.length > 0 && (
+                                    <div>
+                                        <table className="w-full text-2xl border-collapse">
+                                            <thead>
+                                                <tr className="bg-green-600 text-white">
+                                                    <th className="p-8 text-left text-4xl">Obra</th>
+                                                    <th className="p-8 text-4xl text-center">Quantidade Lanche</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.units.map((unit: any) => (
+                                                    <tr key={unit.id} className="text-center">
+                                                        <td className="p-8 border border-black text-left text-3xl font-medium">{unit.name}</td>
+                                                        <td className="p-8 border border-black text-4xl font-bold">{previewData.unitCounts[unit.id] || 0}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="text-center font-bold bg-gray-100">
+                                                    <td className="p-8 border border-black text-left text-5xl">TOTAL OBRA</td>
+                                                    <td className="p-8 border border-black text-5xl">
+                                                        {previewData.units.reduce((sum: number, unit: any) => sum + (previewData.unitCounts[unit.id] || 0), 0)}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                <div className="text-center pt-8 border-t-4 border-gray-300">
+                                    <span className="text-8xl font-black uppercase">TOTAL GERAL | </span>
+                                    <span className="text-8xl font-black">
+                                        {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.accommodationCounts[acc.id] || 0), 0) +
+                                            previewData.units.reduce((sum: number, unit: any) => sum + (previewData.unitCounts[unit.id] || 0), 0) +
+                                            (previewData.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0)}
+                                    </span>
+                                </div>
+                            </div>
                         )}
 
                         {previewType === "dds" && (

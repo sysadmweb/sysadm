@@ -25,8 +25,11 @@ import {
     Utensils,
     Fuel,
     RefreshCcw,
-    Settings
+    Settings,
+    PackagePlus,
+    Truck
 } from "lucide-react";
+
 
 export default function Layout() {
     const { user, logout } = useAuth();
@@ -88,8 +91,11 @@ export default function Layout() {
         // { path: "/rooms", icon: Bed, label: "Quartos", key: "rooms" },
         { path: "/functions", icon: Briefcase, label: "Funções", key: "functions" },
         { path: "/categories", icon: Tag, label: "Categorias", key: "categories" },
+        { path: "/suppliers", icon: Truck, label: "Fornecedores", key: "suppliers" },
         { path: "/status", icon: Activity, label: "Status", key: "status" },
+        { path: "/adicionais", icon: PackagePlus, label: "Adicionais", key: "adicionais" },
         { path: "/inspection", icon: ClipboardCheck, label: "Vistorias", key: "inspection" },
+
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
         { path: "/meals", icon: Utensils, label: "Refeição", key: "meals" },

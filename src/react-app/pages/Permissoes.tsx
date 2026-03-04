@@ -24,7 +24,10 @@ import {
   UserLock,
   RefreshCcw,
   Settings,
+  PackagePlus,
+  Truck,
 } from "lucide-react";
+
 import { useAuth } from "@/react-app/contexts/AuthContext";
 
 type SimpleUser = {
@@ -79,8 +82,11 @@ export default function Permissoes() {
     { key: "accommodations", label: "Alojamentos", icon: Home },
     { key: "functions", label: "Funções", icon: Briefcase },
     { key: "categories", label: "Categorias", icon: Tag },
+    { key: "suppliers", label: "Fornecedores", icon: Truck },
     { key: "status", label: "Status", icon: Activity },
+    { key: "adicionais", label: "Adicionais", icon: PackagePlus },
     { key: "inspection", label: "Vistorias", icon: ClipboardCheck },
+
     { key: "jornada", label: "Jornada", icon: Clock },
     { key: "reports", label: "Relatórios", icon: FileText },
     { key: "meals", label: "Refeição", icon: Utensils },

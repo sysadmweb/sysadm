@@ -144,3 +144,32 @@ INSERT INTO public.users (username, password_hash, name, unit_id, is_super_user)
 INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0001', 'Carlos Pereira', '2025-01-10', NULL, NULL, 1, 1, 1, NULL, 'Ativo');
 INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0002', 'Ana Lima', '2025-01-12', NULL, NULL, 1, NULL, NULL, NULL, 'Pendente');
 INSERT INTO public.employees (registration_number, full_name, arrival_date, departure_date, observation, unit_id, accommodation_id, room_id, function_id, status) VALUES ('0003', 'Rafael Costa', '2025-01-15', NULL, NULL, 2, NULL, NULL, NULL, 'Pendente');
+
+CREATE TABLE public.adicionais (
+  id BIGSERIAL PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  quantidade_marmita NUMERIC NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER set_adicionais_updated_at
+BEFORE UPDATE ON public.adicionais
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE public.fornecedores (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  category_id BIGINT REFERENCES public.categorias(id),
+  phone TEXT,
+  responsible TEXT,
+  observation TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER set_fornecedores_updated_at
+BEFORE UPDATE ON public.fornecedores
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

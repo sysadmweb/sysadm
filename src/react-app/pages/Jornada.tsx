@@ -170,11 +170,21 @@ export default function Jornada() {
         const isSuper = user?.is_super_user;
         let unitIds: number[] = [];
         if (!isSuper && user?.id) {
+            // First, include the unit_id from the user profile if it exists
+            if (user.unit_id) {
+                unitIds.push(user.unit_id);
+            }
+
+            // Then, fetch additional units linked in the join table
             const { data: links } = await supabase
                 .from("usuarios_unidades")
                 .select("unit_id")
                 .eq("user_id", user.id);
-            unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
+            if (Array.isArray(links)) {
+                links.forEach(l => {
+                    if (!unitIds.includes(l.unit_id)) unitIds.push(l.unit_id);
+                });
+            }
         }
         return { isSuper, unitIds };
     };
@@ -184,10 +194,12 @@ export default function Jornada() {
     }, [user]);
 
     const fetchData = async () => {
+        if (!user) return;
         setIsLoading(true);
         try {
             const { isSuper: isSuperUser, unitIds } = await fetchUserUnits();
 
+            // 1. Fetch Employees
             let empQuery = supabase.from("funcionarios")
                 .select("id, full_name, unit_id, arrival_date, transferred_arrival_date, funcoes(type)")
                 .eq("is_active", true)
@@ -203,15 +215,8 @@ export default function Jornada() {
                 empQuery = empQuery.in("unit_id", unitIds);
             }
 
-            let logsQuery = supabase.from("registros_trabalho").select("*").order("work_date", { ascending: false });
-            if (!isSuperUser) {
-                logsQuery = logsQuery.in("unit_id", unitIds);
-            }
-
-            const [empRes, logsRes] = await Promise.all([empQuery, logsQuery]);
-
+            const empRes = await empQuery;
             if (empRes.error) throw empRes.error;
-            if (logsRes.error) throw logsRes.error;
 
             const formattedEmployees = (empRes.data || []).map((emp: any) => ({
                 id: emp.id,
@@ -223,6 +228,34 @@ export default function Jornada() {
             }));
 
             setEmployees(formattedEmployees);
+
+            // 2. Fetch Work Logs
+            // We filter by employee_id because unit_id in registros_trabalho might be null for legacy records.
+            // We also limit the date range to the last ~90 days to avoid fetching too much data,
+            // while ensuring the current calendar view is populated.
+            const sixtyDaysAgo = new Date();
+            sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 90);
+            const dateStr = sixtyDaysAgo.toISOString().split('T')[0];
+
+            let logsQuery = supabase.from("registros_trabalho")
+                .select("*")
+                .gte("work_date", dateStr)
+                .order("work_date", { ascending: false });
+
+            if (!isSuperUser) {
+                const empIds = formattedEmployees.map(e => e.id);
+                if (empIds.length > 0) {
+                    // Split empIds into chunks if too many, but for now 1000 is usually the limit
+                    logsQuery = logsQuery.in("employee_id", empIds);
+                } else {
+                    setWorkLogs([]);
+                    return;
+                }
+            }
+
+            const logsRes = await logsQuery;
+            if (logsRes.error) throw logsRes.error;
+
             setWorkLogs(logsRes.data || []);
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -238,8 +271,9 @@ export default function Jornada() {
         const logsByDate: Record<string, number[]> = {};
 
         workLogs.forEach((log: WorkLog) => {
-            if (!logsByDate[log.work_date]) logsByDate[log.work_date] = [];
-            logsByDate[log.work_date].push(log.employee_id);
+            const dateStr = log.work_date.split('T')[0];
+            if (!logsByDate[dateStr]) logsByDate[dateStr] = [];
+            logsByDate[dateStr].push(log.employee_id);
         });
 
         Object.entries(logsByDate).forEach(([date, empIds]) => {
@@ -262,7 +296,7 @@ export default function Jornada() {
         // Se a data mudou, resetamos tudo para os dados do banco naquela data
         if (selectedDate !== lastSelectedDate) {
             const daily: Record<number, Partial<WorkLog>> = {};
-            workLogs.filter(l => l.work_date === selectedDate).forEach(l => {
+            workLogs.filter(l => l.work_date.split('T')[0] === selectedDate).forEach(l => {
                 daily[l.employee_id] = l;
             });
             setLocalLogs(daily);
@@ -274,7 +308,7 @@ export default function Jornada() {
         // mantendo o que o usuário digitou nas outras linhas
         setLocalLogs(prev => {
             const next = { ...prev };
-            workLogs.filter(l => l.work_date === selectedDate).forEach(l => {
+            workLogs.filter(l => l.work_date.split('T')[0] === selectedDate).forEach(l => {
                 // Se não temos edição local ou se o id já existia, atualizamos com o dado do banco
                 // Isso preserva edições "sujas" de novos registros ou registros existentes
                 if (!next[l.employee_id] || next[l.employee_id].id === l.id) {
@@ -376,9 +410,9 @@ export default function Jornada() {
         const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = categoryFilter === "TODOS" || emp.category === categoryFilter;
 
-        // Filtro por data de chegada
+        // Filtro por data de chegada: deve estar preenchida e ser anterior ou igual à data selecionada
         const effectiveArrival = emp.transferred_arrival_date || emp.arrival_date;
-        const arrivedBySelectedDate = !effectiveArrival || selectedDate >= effectiveArrival;
+        const arrivedBySelectedDate = effectiveArrival && selectedDate >= effectiveArrival;
 
         return matchesSearch && matchesCategory && arrivedBySelectedDate;
     });
