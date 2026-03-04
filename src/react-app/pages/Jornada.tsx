@@ -123,6 +123,7 @@ type Employee = {
     full_name: string;
     unit_id: number;
     category: string | null;
+    function_name: string | null;
     arrival_date: string | null;
     transferred_arrival_date: string | null;
 };
@@ -201,7 +202,7 @@ export default function Jornada() {
 
             // 1. Fetch Employees
             let empQuery = supabase.from("funcionarios")
-                .select("id, full_name, unit_id, arrival_date, transferred_arrival_date, funcoes(type)")
+                .select("id, full_name, unit_id, arrival_date, transferred_arrival_date, funcoes(name, type)")
                 .eq("is_active", true)
                 .order("full_name");
 
@@ -223,6 +224,7 @@ export default function Jornada() {
                 full_name: emp.full_name,
                 unit_id: emp.unit_id,
                 category: emp.funcoes?.type || null,
+                function_name: emp.funcoes?.name || null,
                 arrival_date: emp.arrival_date ? emp.arrival_date.split('T')[0] : null,
                 transferred_arrival_date: emp.transferred_arrival_date ? emp.transferred_arrival_date.split('T')[0] : null
             }));
@@ -618,6 +620,7 @@ export default function Jornada() {
                                                     <span className="text-slate-100 font-bold text-lg">{emp.full_name}</span>
                                                     <span className={`text-[10px] font-bold uppercase ${emp.category === 'MOD' ? 'text-blue-400' : 'text-purple-400'}`}>
                                                         {emp.category || 'SEM CATEGORIA'}
+                                                        {emp.function_name && ` - ${emp.function_name}`}
                                                     </span>
                                                 </div>
                                                 <button
@@ -728,6 +731,7 @@ export default function Jornada() {
                                                                 <span className="text-slate-200 font-medium">{emp.full_name}</span>
                                                                 <span className={`text-[10px] font-bold uppercase ${emp.category === 'MOD' ? 'text-blue-400' : 'text-purple-400'}`}>
                                                                     {emp.category || '-'}
+                                                                    {emp.function_name && ` - ${emp.function_name}`}
                                                                 </span>
                                                             </div>
                                                         </td>

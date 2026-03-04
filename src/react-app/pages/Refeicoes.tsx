@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Status } from "@/shared/types";
-import { Search, Utensils, Loader2, CheckSquare, CreditCard } from "lucide-react";
+import { Search, Utensils, Loader2, CheckSquare, CreditCard, ChevronUp, ChevronDown } from "lucide-react";
 
 // Calendar Component
 function WorkDaysCalendar() {
@@ -116,6 +116,7 @@ export default function Refeicoes() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [updating, setUpdating] = useState(false);
   const [mealConfig, setMealConfig] = useState({ targetDays: 0, stock: 0 });
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -137,7 +138,7 @@ export default function Refeicoes() {
           supabase.from("status").select("id, name, is_active"),
           supabase
             .from("funcionarios")
-            .select("id, full_name, unit_id, status_id, refeicao_status_id, is_active")
+            .select("id, full_name, unit_id, status_id, refeicao_status_id, arrival_date, is_active, funcoes(name, type)")
             .eq("is_active", true)
             .order("full_name"),
           supabase.from("config").select("*"),
@@ -152,19 +153,33 @@ export default function Refeicoes() {
         const stock = Number(configData.find((c) => c.key === "meal_stock")?.value || 0);
         setMealConfig({ targetDays, stock });
 
-        let emps = (employeesRes.data || []) as Employee[];
-        if (!isSuper && unitIds.length > 0) {
-          emps = emps.filter((e) => unitIds.includes(e.unit_id));
-        } else if (!isSuper && unitIds.length === 0) {
-          emps = [];
-        }
-
         const sts = (statusesRes.data || []) as Status[];
         const inactiveId = sts.find((s) => s.name.toUpperCase() === "INATIVO")?.id;
-        const filteredActive = inactiveId ? emps.filter((e) => e.status_id !== inactiveId) : emps;
+
+        let filteredEmps = (employeesRes.data || []) as any[];
+
+        // Filter by unit
+        if (!isSuper) {
+          if (unitIds.length > 0) {
+            filteredEmps = filteredEmps.filter((e) => unitIds.includes(e.unit_id));
+          } else {
+            filteredEmps = [];
+          }
+        }
+
+        // Filter inactive
+        if (inactiveId) {
+          filteredEmps = filteredEmps.filter((e) => e.status_id !== inactiveId);
+        }
+
+        const formattedEmps = filteredEmps.map((e) => ({
+          ...e,
+          category: e.funcoes?.type || null,
+          function_name: e.funcoes?.name || null,
+        }));
 
         setStatuses(sts);
-        setEmployees(filteredActive);
+        setEmployees(formattedEmps as any[]);
       } catch (error) {
         console.error("Meals page load error:", error);
         showToast("Falha ao carregar dados", "error");
@@ -180,14 +195,34 @@ export default function Refeicoes() {
 
   const displayed = useMemo(() => {
     const term = (searchTerm || "").toUpperCase();
-    return employees.filter((e) => {
+    let result = employees.filter((e) => {
       const nameOk = (e.full_name || "").toUpperCase().includes(term);
       if (filterStatus === "todos") return nameOk;
       if (filterStatus === "obra") return nameOk && e.refeicao_status_id === obraStatusId;
       if (filterStatus === "alojamento") return nameOk && e.refeicao_status_id === alojStatusId;
       return nameOk;
     });
-  }, [employees, searchTerm, filterStatus, obraStatusId, alojStatusId]);
+
+    if (sortConfig !== null) {
+      result.sort((a: any, b: any) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === null) return 1;
+        if (bValue === null) return -1;
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return result;
+  }, [employees, searchTerm, filterStatus, obraStatusId, alojStatusId, sortConfig]);
 
   const obraCount = useMemo(() => employees.filter((e) => e.refeicao_status_id === obraStatusId).length, [employees, obraStatusId]);
   const alojCount = useMemo(() => employees.filter((e) => e.refeicao_status_id === alojStatusId).length, [employees, alojStatusId]);
@@ -195,6 +230,14 @@ export default function Refeicoes() {
   const toggle = (id: number) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const selectAll = () => setSelectedIds(displayed.map((e) => e.id));
   const clearAll = () => setSelectedIds([]);
+
+  const requestSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   const setMealStatus = async (target: "obra" | "alojamento") => {
     if (selectedIds.length === 0) {
@@ -307,17 +350,39 @@ export default function Refeicoes() {
                 <thead className="bg-slate-800/50 border-b border-slate-700/50 sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
+                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Cat.</th>
+                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Função</th>
+                    <th
+                      className="px-3 py-4 text-left text-sm font-semibold text-slate-300 cursor-pointer hover:text-blue-400 transition-colors"
+                      onClick={() => requestSort('arrival_date')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Chegada
+                        {sortConfig?.key === 'arrival_date' && (
+                          sortConfig.direction === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Status Refeição</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayed.map((e) => (
+                  {displayed.map((e: any) => (
                     <tr key={e.id} className="hover:bg-slate-800/30 transition-colors">
                       <td className="px-3 py-3 text-slate-200">
                         <label className="inline-flex items-center gap-3 cursor-pointer">
                           <input type="checkbox" className="accent-blue-500" checked={selectedIds.includes(e.id)} onChange={() => toggle(e.id)} />
                           <span>{e.full_name}</span>
                         </label>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded border ${e.category === 'MOD' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'}`}>
+                          {e.category || '-'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-slate-400 text-sm">{e.function_name || "-"}</td>
+                      <td className="px-3 py-3 text-slate-400 text-sm">
+                        {e.arrival_date ? new Date(e.arrival_date + 'T00:00:00').toLocaleDateString('pt-BR') : "-"}
                       </td>
                       <td className="px-3 py-3 text-slate-300">{statuses.find((s) => s.id === e.refeicao_status_id)?.name || "-"}</td>
                     </tr>
@@ -334,13 +399,22 @@ export default function Refeicoes() {
 
           {/* Mobile List */}
           <div className="md:hidden space-y-2 max-h-[420px] overflow-y-auto">
-            {displayed.map((e) => (
+            {displayed.map((e: any) => (
               <label key={e.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedIds.includes(e.id) ? "bg-blue-500/10 border-blue-500/50" : "bg-slate-800/50 border-slate-700/50 hover:bg-slate-800"}`}>
                 <input type="checkbox" className="accent-blue-500" checked={selectedIds.includes(e.id)} onChange={() => toggle(e.id)} />
                 <Utensils className="w-4 h-4 text-blue-400" />
                 <div className="flex-1">
-                  <div className="text-slate-200 text-sm">{e.full_name}</div>
-                  <div className="text-slate-400 text-xs">{statuses.find((s) => s.id === e.refeicao_status_id)?.name || "-"}</div>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-slate-200 text-sm font-medium">{e.full_name}</span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${e.category === 'MOD' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'}`}>
+                      {e.category || '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-slate-400">{e.function_name || "-"}</span>
+                    <span className="text-slate-500">{e.arrival_date ? new Date(e.arrival_date + 'T00:00:00').toLocaleDateString('pt-BR') : "-"}</span>
+                  </div>
+                  <div className="text-blue-400 font-bold text-[10px] mt-1">{statuses.find((s) => s.id === e.refeicao_status_id)?.name || "-"}</div>
                 </div>
               </label>
             ))}
