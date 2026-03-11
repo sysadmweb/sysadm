@@ -99,6 +99,7 @@ export default function Layout() {
         { path: "/jornada", icon: Clock, label: "Jornada", key: "jornada" },
         { path: "/reports", icon: FileText, label: "Relatórios", key: "reports" },
         { path: "/meals", icon: Utensils, label: "Refeição", key: "meals" },
+        { path: "/formar-equipe", icon: Users, label: "Formar Equipe", key: "formar_equipe" },
         { path: "/abastecimento", icon: Fuel, label: "Abastecimento", key: "abastecimento" },
         { path: "/devolucao", icon: RefreshCcw, label: "Devolução", key: "devolucao" },
         {

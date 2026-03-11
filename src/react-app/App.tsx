@@ -25,6 +25,7 @@ import CadastroProduto from "@/react-app/pages/CadastroProduto";
 import MovimentacaoProduto from "@/react-app/pages/MovimentacaoProduto";
 import Faxineiras from "@/react-app/pages/Faxineiras";
 import Refeicoes from "@/react-app/pages/Refeicoes";
+import FormarEquipes from "@/react-app/pages/FormarEquipes";
 import Abastecimento from "@/react-app/pages/Abastecimento";
 import Devolucao from "@/react-app/pages/Devolucao";
 import Configuracoes from "@/react-app/pages/Configuracoes";
@@ -73,6 +74,7 @@ export default function App() {
                         <Route path="stock/product-movement" element={<MovimentacaoProduto />} />
                         <Route path="cleaners" element={<Faxineiras />} />
                         <Route path="meals" element={<Refeicoes />} />
+                        <Route path="formar-equipe" element={<FormarEquipes />} />
                         <Route path="abastecimento" element={<Abastecimento />} />
                         <Route path="devolucao" element={<Devolucao />} />
                         <Route path="adicionais" element={<Adicionais />} />

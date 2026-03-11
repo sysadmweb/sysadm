@@ -20,7 +20,7 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      type EmployeeLite = { id: number; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean; arrival_date: string | null };
+      type EmployeeLite = { id: number; full_name: string; function_id: number | null; unit_id: number | null; accommodation_id: number | null; is_active: boolean; arrival_date: string | null; status_id: number | null };
       type FunctionLite = { id: number; name: string };
 
 
@@ -28,13 +28,9 @@ export default function Dashboard() {
         .from("funcionarios")
         .select("id", { count: "exact", head: true })
         .eq("is_active", true);
-      const employeeRowsQuery = supabase
-        .from("funcionarios")
-        .select("id")
-        .eq("is_active", true);
       const employeesQuery = supabase
         .from("funcionarios")
-        .select("id, full_name, function_id, unit_id, accommodation_id, is_active, arrival_date");
+        .select("id, full_name, function_id, unit_id, accommodation_id, is_active, arrival_date, status_id");
       const accommodationsQuery = supabase
         .from("alojamentos")
         .select("id")
@@ -49,11 +45,11 @@ export default function Dashboard() {
         unitIds = Array.isArray(links) ? (links as { unit_id: number }[]).map((l) => l.unit_id) : [];
       }
 
-      const [{ count: totalEmployees }, { data: activeEmployeesRows }, { data: employees }, { data: functions }, { data: accRows }, { data: invoices }, { data: manualPurchases }] = await Promise.all([
+      const [{ count: totalEmployees }, { data: employees }, { data: functions }, { data: statuses }, { data: accRows }, { data: invoices }, { data: manualPurchases }] = await Promise.all([
         isSuper || unitIds.length === 0 ? employeeCountQuery : employeeCountQuery.in("unit_id", unitIds),
-        isSuper || unitIds.length === 0 ? employeeRowsQuery : employeeRowsQuery.in("unit_id", unitIds),
         isSuper || unitIds.length === 0 ? employeesQuery : employeesQuery.in("unit_id", unitIds),
         supabase.from("funcoes").select("id, name").eq("is_active", true),
+        supabase.from("status").select("id, name"),
         isSuper || unitIds.length === 0 ? accommodationsQuery : accommodationsQuery.in("unit_id", unitIds),
         supabase.from("notas_fiscais").select("total_value"),
         supabase.from("compras_manuais").select("total_value").eq("is_active", true),
@@ -74,32 +70,38 @@ export default function Dashboard() {
       const accommodationsList = Array.isArray(accommodationsWithBeds) ? (accommodationsWithBeds as { id: number; bed_count: number }[]) : [];
       const employeesList = Array.isArray(employees) ? (employees as EmployeeLite[]) : [];
       const functionsList = Array.isArray(functions) ? (functions as FunctionLite[]) : [];
+      const statusesList = Array.isArray(statuses) ? (statuses as { id: number; name: string }[]) : [];
+
+      const inactiveStatusId = statusesList.find(s => s.name === "INATIVO")?.id;
 
       const total_beds = accommodationsList.reduce((sum, a) => sum + (a.bed_count || 0), 0);
       const occupied_beds = employeesList.filter((e) => e.is_active && e.accommodation_id != null).length;
       const available_beds = Math.max(total_beds - occupied_beds, 0);
-      const active_employees = Array.isArray(activeEmployeesRows) ? activeEmployeesRows.length : 0;
+      
+      const active_employees = employeesList.filter(e => e.is_active && e.status_id !== inactiveStatusId).length;
+      const inactive_employees = employeesList.filter(e => e.is_active && e.status_id === inactiveStatusId).length;
 
       const employees_by_function = functionsList.map((f) => ({
         function_name: f.name,
-        count: employeesList.filter((e) => e.function_id === f.id && e.is_active).length,
+        count: employeesList.filter((e) => e.function_id === f.id && e.is_active && e.status_id !== inactiveStatusId).length,
       }));
-
-
 
       setStats({
         total_employees: totalEmployees ?? 0,
         active_employees,
+        inactive_employees,
         total_beds,
         occupied_beds,
         available_beds,
         total_accommodations: activeAccommodations ?? 0,
         employees_by_function,
       });
-    } catch {
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
       setStats({
         total_employees: 0,
         active_employees: 0,
+        inactive_employees: 0,
         total_beds: 0,
         occupied_beds: 0,
         available_beds: 0,
@@ -123,7 +125,6 @@ export default function Dashboard() {
   }
 
   const statCards = [
-
     {
       label: "Funcionários Ativos",
       value: stats?.active_employees || 0,
@@ -131,6 +132,14 @@ export default function Dashboard() {
       color: "from-green-500 to-emerald-500",
       bgColor: "bg-green-500/10",
       accentRing: "ring-green-400",
+    },
+    {
+      label: "Funcionários Inativos",
+      value: stats?.inactive_employees || 0,
+      icon: UserCheck,
+      color: "from-red-500 to-rose-500",
+      bgColor: "bg-red-500/10",
+      accentRing: "ring-red-400",
     },
     {
       label: "Vagas Ocupadas",
@@ -167,7 +176,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-6">
         {statCards.map((card) => (
           <div
             key={card.label}
@@ -210,7 +219,7 @@ export default function Dashboard() {
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all duration-500"
                     style={{
-                      width: `${(item.count / (stats.total_employees || 1)) * 100
+                      width: `${(item.count / (stats.active_employees || 1)) * 100
                         }%`,
                     }}
                   />

@@ -466,7 +466,12 @@ export default function Funcionarios() {
       )}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Integração</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Integração</h1>
+            <span className="px-2.5 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-sm font-semibold">
+              {displayedEmployees.length}
+            </span>
+          </div>
           <p className="text-sm md:text-base text-slate-400 mt-1">Gerencie os funcionários das obras</p>
         </div>
         <div className="w-full md:w-auto flex items-center gap-3">

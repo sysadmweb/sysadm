@@ -41,6 +41,10 @@ export default function Relatorios() {
     const [reportDate, setReportDate] = useState<string>("");
     // Include all statuses for meal reports
     const [includeAllStatuses, setIncludeAllStatuses] = useState<boolean>(false);
+    // Include additional items for snack report
+    const [includeAdicionaisLanche, setIncludeAdicionaisLanche] = useState<boolean>(false);
+    const [availableAdicionais, setAvailableAdicionais] = useState<Adicional[]>([]);
+    const [selectedLancheAdicionais, setSelectedLancheAdicionais] = useState<Record<number, number>>({});
 
     // Supplier control (for Café da Manhã)
     const [controlSuppliers, setControlSuppliers] = useState(false);
@@ -99,6 +103,14 @@ export default function Relatorios() {
                     if (cSups) setCafeSuppliers(cSups);
                 }
             }
+
+            // Fetch Active Additionals for Lanche report selection
+            const { data: ads } = await supabase
+                .from("adicionais")
+                .select("*")
+                .eq("ativo", true)
+                .order("nome");
+            if (ads) setAvailableAdicionais(ads);
         })();
     }, []);
 
@@ -472,6 +484,44 @@ export default function Relatorios() {
         return { accommodations: filteredAccs, accommodationCounts, units: filteredUnits, unitCounts, adicionais };
     };
 
+
+    const fetchEquipeTrabalhoData = async (shift: string) => {
+        const { isSuper, unitIds } = await fetchUserUnits();
+        let employees: any[] = [];
+        let units: Unit[] = [];
+
+        const [empRes, unitsRes, statusRes] = await Promise.all([
+            supabase
+                .from("funcionarios")
+                .select("id, full_name, unit_id, is_active, status_id, function_id, shift, funcoes(name)")
+                .eq("is_active", true)
+                .eq("shift", shift)
+                .order("full_name"),
+            supabase.from("unidades").select("id, name").eq("is_active", true),
+            supabase.from("status").select("id, name")
+        ]);
+
+        if (empRes.error) throw empRes.error;
+        if (unitsRes.error) throw unitsRes.error;
+        if (statusRes.error) throw statusRes.error;
+
+        const inactiveStatusId = statusRes.data?.find(s => s.name === "INATIVO")?.id;
+
+        employees = (empRes.data || []) as any[];
+        
+        if (inactiveStatusId) {
+            employees = employees.filter(e => e.status_id !== inactiveStatusId);
+        }
+
+        units = (unitsRes.data || []) as Unit[];
+
+        if (!isSuper) {
+            if (unitIds.length > 0) employees = employees.filter(e => unitIds.includes(e.unit_id));
+            else employees = [];
+        }
+
+        return { employees, units };
+    };
 
     const fetchDDSData = async () => {
         const { isSuper, unitIds } = await fetchUserUnits();
@@ -918,8 +968,10 @@ export default function Relatorios() {
     };
 
     const generateLanchePDF = async (data: any) => {
-        const { accommodations, accommodationCounts, units, unitCounts } = data;
-        if (accommodations.length === 0 && units.length === 0) {
+        const { units, unitCounts } = data;
+        const selectedAds = data.adicionaisSelecao || [];
+
+        if (units.length === 0 && selectedAds.length === 0) {
             showToast("Nenhum dado encontrado para o relatório.", "error");
             return;
         }
@@ -936,34 +988,6 @@ export default function Relatorios() {
         doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
 
         currentY = 45;
-
-        // Tabela de Alojamento
-        if (accommodations.length > 0) {
-            const body = accommodations.map((acc: Accommodation) => [
-                acc.name || "-",
-                (accommodationCounts[acc.id] || 0).toString(),
-            ]);
-
-            const total = accommodations.reduce((sum: number, acc: Accommodation) => sum + (accommodationCounts[acc.id] || 0), 0);
-            body.push(["TOTAL ALOJAMENTO", total.toString()]);
-
-            autoTable(doc, {
-                head: [["ALOJAMENTO", "LANCHE"]],
-                body,
-                startY: currentY,
-                theme: 'grid',
-                styles: { fontSize: 10, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
-                headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-                columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' } },
-                didParseCell: (data: any) => {
-                    if (data.row.index === body.length - 1) {
-                        data.cell.styles.fontStyle = 'bold';
-                        data.cell.styles.fillColor = [240, 240, 240];
-                    }
-                },
-            });
-            currentY = (doc as any).lastAutoTable.finalY + 15;
-        }
 
         // Tabela de Obra
         if (units.length > 0) {
@@ -994,16 +1018,16 @@ export default function Relatorios() {
         }
 
         // Tabela de Adicionais
-        if (data.adicionais && data.adicionais.length > 0) {
-            const adsBody = data.adicionais.map((ad: any) => [
+        if (includeAdicionaisLanche && selectedAds.length > 0) {
+            const adsBody = selectedAds.map((ad: any) => [
                 ad.nome || "-",
-                ad.quantidade_marmita.toString()
+                ad.quantidadeSelecionada.toString()
             ]);
-            const totalAds = data.adicionais.reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
-            adsBody.push(["TOTAL ADICIONAIS", totalAds.toString()]);
+            const weightedTotalAds = selectedAds.reduce((sum: number, ad: any) => sum + (ad.quantidadeSelecionada * (ad.quantidade_marmita || 1)), 0);
+            adsBody.push(["TOTAL MARMITA EQUIVALENTE", weightedTotalAds.toString()]);
 
             autoTable(doc, {
-                head: [["ITEM", "QUANTIDADE MARMITA EQUIVALENTE"]],
+                head: [["ITEM", "QUANTIDADE SELECIONADA"]],
                 body: adsBody,
                 startY: currentY,
                 theme: 'grid',
@@ -1019,10 +1043,9 @@ export default function Relatorios() {
             currentY = (doc as any).lastAutoTable.finalY + 20;
         }
 
-        const totalAloj = accommodations.reduce((sum: number, acc: any) => sum + (accommodationCounts[acc.id] || 0), 0);
         const totalObra = units.reduce((sum: number, unit: any) => sum + (unitCounts[unit.id] || 0), 0);
-        const totalAds = (data.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0);
-        const grandTotal = totalAloj + totalObra + totalAds;
+        const totalAdsWeighted = (includeAdicionaisLanche && selectedAds || []).reduce((sum: number, ad: any) => sum + (ad.quantidadeSelecionada * (ad.quantidade_marmita || 1)), 0);
+        const grandTotal = totalObra + totalAdsWeighted;
 
         doc.setFontSize(24);
         doc.setFont("helvetica", "bold");
@@ -1119,6 +1142,62 @@ export default function Relatorios() {
         const link = document.createElement('a');
         link.href = url;
         link.download = 'relatorio_integracao.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const generateEquipeTrabalhoPDF = async (data: any, shiftName: string) => {
+        const { employees, units } = data;
+        if (!employees || employees.length === 0) {
+            showToast("Nenhum colaborador encontrado.", "error");
+            return;
+        }
+
+        const doc = new jsPDF();
+        const logoDataUrl = await getSystemLogo();
+
+        const groupedEmployees: Record<number, Employee[]> = {};
+        employees.forEach((emp: Employee) => {
+            if (!groupedEmployees[emp.unit_id]) groupedEmployees[emp.unit_id] = [];
+            groupedEmployees[emp.unit_id].push(emp);
+        });
+        const unitIdsToPrint = Object.keys(groupedEmployees).map(Number);
+
+        unitIdsToPrint.forEach((unitId, index) => {
+            if (index > 0) doc.addPage();
+            const unit = units.find((u: Unit) => u.id === unitId);
+            const unitEmployees = groupedEmployees[unitId].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+            if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+            doc.setFontSize(18);
+            doc.text(`EQUIPE DE TRABALHO - ${shiftName}`, 50, 20);
+            doc.setFontSize(12);
+            const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+            doc.text(`Emitido em: ${dateLabel}`, 50, 30);
+            const unitName = unit?.name || "-";
+            doc.text(`Obra: ${unitName}`, 50, 36);
+            doc.text(`Colaboradores: ${unitEmployees.length}`, 50, 42);
+
+            autoTable(doc, {
+                startY: 50,
+                head: [["Colaborador", "Função", "Observação"]],
+                body: unitEmployees.map((e: any) => [e.full_name || "-", e.funcoes?.name || "-", ""]),
+                theme: 'grid',
+                styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3, overflow: 'linebreak', cellPadding: 2 },
+                headStyles: { fillColor: [76, 81, 191], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: {
+                    0: { cellWidth: 70, halign: 'left', overflow: 'linebreak' },
+                    1: { cellWidth: 50, halign: 'center' },
+                    2: { cellWidth: 60, halign: 'center' }
+                }
+            });
+        });
+
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `relatorio_equipe_trabalho_${shiftName.toLowerCase()}.pdf`;
         link.click();
         URL.revokeObjectURL(url);
     };
@@ -1255,13 +1334,25 @@ export default function Relatorios() {
                 await generateCafeDaManhaPDF(data);
             } else if (selectedReport === "lanche") {
                 data = await fetchLancheData(includeAllStatuses);
-                await generateLanchePDF(data);
+                const adicionaisSelecao = availableAdicionais
+                    .filter(ad => selectedLancheAdicionais[ad.id] !== undefined)
+                    .map(ad => ({
+                        ...ad,
+                        quantidadeSelecionada: selectedLancheAdicionais[ad.id]
+                    }));
+                await generateLanchePDF({ ...data, adicionaisSelecao });
             } else if (selectedReport === "integration") {
                 data = await fetchIntegrationData();
                 await generateIntegrationPDF(data);
             } else if (selectedReport === "dds") {
                 data = await fetchDDSData();
                 await generateDDSPDF(data);
+            } else if (selectedReport === "equipe-trabalho-manha") {
+                data = await fetchEquipeTrabalhoData("OBRA");
+                await generateEquipeTrabalhoPDF(data, "MANHÃ");
+            } else if (selectedReport === "equipe-trabalho-noite") {
+                data = await fetchEquipeTrabalhoData("ALOJAMENTO");
+                await generateEquipeTrabalhoPDF(data, "NOITE");
             } else if (selectedReport === "romaneio") {
                 await generateRomaneioPDF();
             }
@@ -1293,7 +1384,26 @@ export default function Relatorios() {
 
             // 2. Set Preview Data & Type with meal type and date
             const systemLogo = await getSystemLogo();
-            setPreviewData({ ...data, mealType, reportDate, includeAllStatuses, systemLogo });
+
+            // Preparar Adicionais Selecionados para o Preview
+            const adicionaisSelecao = selectedReport === "lanche"
+                ? availableAdicionais
+                    .filter(ad => selectedLancheAdicionais[ad.id] !== undefined)
+                    .map(ad => ({
+                        ...ad,
+                        quantidadeSelecionada: selectedLancheAdicionais[ad.id]
+                    }))
+                : [];
+
+            setPreviewData({
+                ...data,
+                mealType,
+                reportDate,
+                includeAllStatuses,
+                includeAdicionaisLanche,
+                adicionaisSelecao,
+                systemLogo
+            });
             setPreviewType(selectedReport);
 
             // 3. Wait for render
@@ -1438,6 +1548,15 @@ export default function Relatorios() {
             color: "text-indigo-400",
             bg: "bg-indigo-500/10",
             border: "border-indigo-500/20"
+        },
+        {
+            id: "equipe-trabalho",
+            title: "EQUIPE DE TRABALHO",
+            description: "Lista de colaboradores por turno/status.",
+            icon: Users,
+            color: "text-rose-400",
+            bg: "bg-rose-500/10",
+            border: "border-rose-500/20"
         },
         {
             id: "romaneio",
@@ -1779,6 +1898,68 @@ export default function Relatorios() {
                                     </label>
                                 </div>
 
+                                {/* Checkbox for ADICIONAIS option in Snack Report */}
+                                {selectedReport === "lanche" && (
+                                    <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={includeAdicionaisLanche}
+                                                onChange={(e) => setIncludeAdicionaisLanche(e.target.checked)}
+                                                className="w-5 h-5 accent-yellow-500 cursor-pointer"
+                                            />
+                                            <div className="flex-1">
+                                                <span className="text-slate-200 font-medium">Incluir Adicionais</span>
+                                                <p className="text-xs text-slate-400 mt-1">
+                                                    Marque para destacar a quantidade de itens adicionais no relatório
+                                                </p>
+                                            </div>
+                                        </label>
+
+                                        {includeAdicionaisLanche && availableAdicionais.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-slate-700 space-y-3">
+                                                <p className="text-sm font-medium text-slate-300 mb-2">Selecione os Adicionais e Quantidades:</p>
+                                                {availableAdicionais.map(ad => (
+                                                    <div key={ad.id} className="flex items-center gap-4 bg-slate-900/50 p-2 rounded border border-slate-800">
+                                                        <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedLancheAdicionais[ad.id] !== undefined}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedLancheAdicionais(prev => ({ ...prev, [ad.id]: 1 }));
+                                                                    } else {
+                                                                        setSelectedLancheAdicionais(prev => {
+                                                                            const next = { ...prev };
+                                                                            delete (next as any)[ad.id];
+                                                                            return next;
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="w-4 h-4 accent-yellow-500 cursor-pointer"
+                                                            />
+                                                            <span className="text-sm text-slate-300">{ad.nome}</span>
+                                                        </label>
+                                                        {selectedLancheAdicionais[ad.id] !== undefined && (
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={selectedLancheAdicionais[ad.id]}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value) || 0;
+                                                                    setSelectedLancheAdicionais(prev => ({ ...prev, [ad.id]: val }));
+                                                                }}
+                                                                className="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-yellow-500 outline-none"
+                                                                placeholder="Qtd"
+                                                            />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col gap-4">
                                     <button
                                         onClick={() => handleMealJPEG(selectedReport === "cafe-da-manha" ? "cafe-da-manha" : "lanche")}
@@ -1850,6 +2031,66 @@ export default function Relatorios() {
                                     )}
                                     <span className="text-slate-200 font-medium">Download PDF</span>
                                 </button>
+                            </>
+                        ) : null}
+
+                        {/* EQUIPE DE TRABALHO Report */}
+                        {selectedReport === "equipe-trabalho" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-6">Selecione o turno para o relatório:</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        onClick={async () => {
+                                            setLoadingReport("equipe-trabalho-manha");
+                                            try {
+                                                const data = await fetchEquipeTrabalhoData("MANHÃ");
+                                                await generateEquipeTrabalhoPDF(data, "MANHÃ");
+                                                showToast("Download iniciado!", "success");
+                                            } catch (error) {
+                                                console.error(error);
+                                                showToast("Erro ao gerar PDF.", "error");
+                                            } finally {
+                                                setLoadingReport(null);
+                                                setSelectedReport(null);
+                                            }
+                                        }}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === "equipe-trabalho-manha" ? (
+                                            <Loader2 className="w-8 h-8 text-rose-400 animate-spin" />
+                                        ) : (
+                                            <Sun className="w-8 h-8 text-orange-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">MANHÃ</span>
+                                    </button>
+
+                                    <button
+                                        onClick={async () => {
+                                            setLoadingReport("equipe-trabalho-noite");
+                                            try {
+                                                const data = await fetchEquipeTrabalhoData("NOITE");
+                                                await generateEquipeTrabalhoPDF(data, "NOITE");
+                                                showToast("Download iniciado!", "success");
+                                            } catch (error) {
+                                                console.error(error);
+                                                showToast("Erro ao gerar PDF.", "error");
+                                            } finally {
+                                                setLoadingReport(null);
+                                                setSelectedReport(null);
+                                            }
+                                        }}
+                                        disabled={loadingReport !== null}
+                                        className="flex flex-col items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                    >
+                                        {loadingReport === "equipe-trabalho-noite" ? (
+                                            <Loader2 className="w-8 h-8 text-rose-400 animate-spin" />
+                                        ) : (
+                                            <Moon className="w-8 h-8 text-indigo-400" />
+                                        )}
+                                        <span className="text-slate-200 font-medium">NOITE</span>
+                                    </button>
+                                </div>
                             </>
                         ) : null}
 
@@ -2142,38 +2383,12 @@ export default function Relatorios() {
 
                         {previewType === "lanche" && (
                             <div className="space-y-10">
-                                {previewData.accommodations.length > 0 && (
-                                    <div>
-                                        <table className="w-full text-2xl border-collapse">
-                                            <thead>
-                                                <tr className="bg-blue-600 text-white">
-                                                    <th className="p-8 text-left text-4xl">Alojamento</th>
-                                                    <th className="p-8 text-4xl text-center">Quantidade Lanche</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {previewData.accommodations.map((acc: any) => (
-                                                    <tr key={acc.id} className="text-center">
-                                                        <td className="p-8 border border-black text-left text-3xl font-medium">{acc.name}</td>
-                                                        <td className="p-8 border border-black text-4xl font-bold">{previewData.accommodationCounts[acc.id] || 0}</td>
-                                                    </tr>
-                                                ))}
-                                                <tr className="text-center font-bold bg-gray-100">
-                                                    <td className="p-8 border border-black text-left text-5xl">TOTAL ALOJAMENTO</td>
-                                                    <td className="p-8 border border-black text-5xl">
-                                                        {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.accommodationCounts[acc.id] || 0), 0)}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-
+                                {/* Lanche: Remove Accommodations as requested, focus on Obra and Selection Additionals */}
                                 {previewData.units.length > 0 && (
                                     <div>
                                         <table className="w-full text-2xl border-collapse">
                                             <thead>
-                                                <tr className="bg-green-600 text-white">
+                                                <tr className="bg-[#27ae60] text-white">
                                                     <th className="p-8 text-left text-4xl">Obra</th>
                                                     <th className="p-8 text-4xl text-center">Quantidade Lanche</th>
                                                 </tr>
@@ -2196,16 +2411,44 @@ export default function Relatorios() {
                                     </div>
                                 )}
 
+                                {previewData.includeAdicionaisLanche && previewData.adicionaisSelecao && previewData.adicionaisSelecao.length > 0 && (
+                                    <div>
+                                        <table className="w-full text-2xl border-collapse">
+                                            <thead>
+                                                <tr className="bg-[#2c3e50] text-white">
+                                                    <th className="p-8 text-left text-4xl">Item Adicional</th>
+                                                    <th className="p-8 text-4xl text-center">Quantidade</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.adicionaisSelecao.map((ad: any) => (
+                                                    <tr key={ad.id} className="text-center">
+                                                        <td className="p-8 border border-black text-left text-3xl font-medium">{ad.nome}</td>
+                                                        <td className="p-8 border border-black text-4xl font-bold">{ad.quantidadeSelecionada}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="text-center font-bold bg-gray-100">
+                                                    <td className="p-8 border border-black text-left text-5xl">TOTAL MARMITA EQUIVALENTE</td>
+                                                    <td className="p-8 border border-black text-5xl">
+                                                        {previewData.adicionaisSelecao.reduce((sum: number, ad: any) => sum + (ad.quantidadeSelecionada * (ad.quantidade_marmita || 1)), 0)}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
                                 <div className="text-center pt-8 border-t-4 border-gray-300">
-                                    <span className="text-8xl font-black uppercase">TOTAL GERAL | </span>
-                                    <span className="text-8xl font-black">
-                                        {previewData.accommodations.reduce((sum: number, acc: any) => sum + (previewData.accommodationCounts[acc.id] || 0), 0) +
-                                            previewData.units.reduce((sum: number, unit: any) => sum + (previewData.unitCounts[unit.id] || 0), 0) +
-                                            (previewData.adicionais || []).reduce((sum: number, ad: any) => sum + (ad.quantidade_marmita || 0), 0)}
-                                    </span>
+                                    <h1 className="text-8xl font-black">
+                                        TOTAL | {
+                                            (previewData.units.reduce((sum: number, unit: any) => sum + (previewData.unitCounts[unit.id] || 0), 0)) +
+                                            (previewData.includeAdicionaisLanche ? (previewData.adicionaisSelecao || []).reduce((sum: number, ad: any) => sum + (ad.quantidadeSelecionada * (ad.quantidade_marmita || 1)), 0) : 0)
+                                        }
+                                    </h1>
                                 </div>
                             </div>
                         )}
+
 
                         {previewType === "dds" && (
                             <div className="space-y-6">

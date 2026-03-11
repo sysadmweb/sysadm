@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Status } from "@/shared/types";
-import { Search, Utensils, Loader2, CheckSquare, CreditCard, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, Utensils, Loader2, CheckSquare, CreditCard, ChevronUp, ChevronDown, Filter, X } from "lucide-react";
 
 // Calendar Component
 function WorkDaysCalendar() {
@@ -105,18 +105,27 @@ function WorkDaysCalendar() {
   );
 }
 
+interface ExtendedEmployee extends Employee {
+  category: string | null;
+  function_name: string | null;
+}
+
 export default function Refeicoes() {
   const { user: currentUser } = useAuth();
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<ExtendedEmployee[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"todos" | "obra" | "alojamento">("todos");
+  const [filterStatus, setFilterStatus] = useState<"todos" | "obra" | "alojamento" | "movimentacao">("todos");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [updating, setUpdating] = useState(false);
   const [mealConfig, setMealConfig] = useState({ targetDays: 0, stock: 0 });
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [selectedFunctions, setSelectedFunctions] = useState<string[]>([]);
+  const [isFunctionFilterOpen, setIsFunctionFilterOpen] = useState(false);
+  const [selectedMealStatuses, setSelectedMealStatuses] = useState<number[]>([]);
+  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -180,6 +189,13 @@ export default function Refeicoes() {
 
         setStatuses(sts);
         setEmployees(formattedEmps as any[]);
+
+        // Initialize function filter with all unique functions
+        const uniqueFuncs = Array.from(new Set(formattedEmps.map(e => e.function_name || "Sem Função")));
+        setSelectedFunctions(uniqueFuncs);
+
+        // Initialize meal status filter with all available statuses
+        setSelectedMealStatuses(sts.map(s => s.id));
       } catch (error) {
         console.error("Meals page load error:", error);
         showToast("Falha ao carregar dados", "error");
@@ -192,15 +208,23 @@ export default function Refeicoes() {
 
   const obraStatusId = useMemo(() => statuses.find((s) => s.name.toUpperCase() === "OBRA")?.id || null, [statuses]);
   const alojStatusId = useMemo(() => statuses.find((s) => s.name.toUpperCase() === "ALOJAMENTO")?.id || null, [statuses]);
+  const movimentacaoStatusId = useMemo(() => statuses.find((s) => s.name.toUpperCase().includes("MOVIMENTA"))?.id || null, [statuses]);
 
   const displayed = useMemo(() => {
     const term = (searchTerm || "").toUpperCase();
     let result = employees.filter((e) => {
       const nameOk = (e.full_name || "").toUpperCase().includes(term);
-      if (filterStatus === "todos") return nameOk;
-      if (filterStatus === "obra") return nameOk && e.refeicao_status_id === obraStatusId;
-      if (filterStatus === "alojamento") return nameOk && e.refeicao_status_id === alojStatusId;
-      return nameOk;
+      const isStatusOk = filterStatus === "todos" ||
+        (filterStatus === "obra" && e.refeicao_status_id === obraStatusId) ||
+        (filterStatus === "alojamento" && e.refeicao_status_id === alojStatusId) ||
+        (filterStatus === "movimentacao" && e.refeicao_status_id === movimentacaoStatusId);
+
+      const funcName = e.function_name || "Sem Função";
+      const isFuncOk = selectedFunctions.length === 0 || selectedFunctions.includes(funcName);
+
+      const isMealStatusOk = selectedMealStatuses.length === 0 || selectedMealStatuses.includes(e.refeicao_status_id);
+
+      return nameOk && isStatusOk && isFuncOk && isMealStatusOk;
     });
 
     if (sortConfig !== null) {
@@ -222,10 +246,11 @@ export default function Refeicoes() {
     }
 
     return result;
-  }, [employees, searchTerm, filterStatus, obraStatusId, alojStatusId, sortConfig]);
+  }, [employees, searchTerm, filterStatus, obraStatusId, alojStatusId, sortConfig, selectedFunctions, selectedMealStatuses]);
 
   const obraCount = useMemo(() => employees.filter((e) => e.refeicao_status_id === obraStatusId).length, [employees, obraStatusId]);
   const alojCount = useMemo(() => employees.filter((e) => e.refeicao_status_id === alojStatusId).length, [employees, alojStatusId]);
+  const movimentacaoCount = useMemo(() => employees.filter((e) => e.refeicao_status_id === movimentacaoStatusId).length, [employees, movimentacaoStatusId]);
 
   const toggle = (id: number) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const selectAll = () => setSelectedIds(displayed.map((e) => e.id));
@@ -239,12 +264,44 @@ export default function Refeicoes() {
     setSortConfig({ key, direction });
   };
 
-  const setMealStatus = async (target: "obra" | "alojamento") => {
+  const allUniqueFunctions = useMemo(() => {
+    return Array.from(new Set(employees.map(e => e.function_name || "Sem Função"))).sort();
+  }, [employees]);
+
+  const toggleFunctionFilter = (func: string) => {
+    setSelectedFunctions(prev =>
+      prev.includes(func) ? prev.filter(f => f !== func) : [...prev, func]
+    );
+  };
+
+  const toggleAllFunctions = () => {
+    if (selectedFunctions.length === allUniqueFunctions.length) {
+      setSelectedFunctions([]);
+    } else {
+      setSelectedFunctions(allUniqueFunctions);
+    }
+  };
+
+  const toggleMealStatusFilter = (statusId: number) => {
+    setSelectedMealStatuses(prev =>
+      prev.includes(statusId) ? prev.filter(id => id !== statusId) : [...prev, statusId]
+    );
+  };
+
+  const toggleAllMealStatuses = () => {
+    if (selectedMealStatuses.length === statuses.length) {
+      setSelectedMealStatuses([]);
+    } else {
+      setSelectedMealStatuses(statuses.map(s => s.id));
+    }
+  };
+
+  const setMealStatus = async (target: "obra" | "alojamento" | "movimentacao") => {
     if (selectedIds.length === 0) {
       showToast("Selecione pelo menos um colaborador", "error");
       return;
     }
-    const targetId = target === "obra" ? obraStatusId : alojStatusId;
+    const targetId = target === "obra" ? obraStatusId : target === "alojamento" ? alojStatusId : movimentacaoStatusId;
     if (!targetId) {
       showToast("Status não encontrado", "error");
       return;
@@ -332,6 +389,15 @@ export default function Refeicoes() {
               >
                 ALOJAMENTO: {alojCount}
               </button>
+              <button
+                onClick={() => setFilterStatus("movimentacao")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${filterStatus === "movimentacao"
+                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/50"
+                  : "bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                  }`}
+              >
+                MOVIMENTAÇÃO: {movimentacaoCount}
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={selectAll} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-700 transition-all flex items-center gap-2 text-sm">
@@ -351,7 +417,54 @@ export default function Refeicoes() {
                   <tr>
                     <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Nome</th>
                     <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Cat.</th>
-                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Função</th>
+                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">
+                      <div className="flex items-center gap-2 relative">
+                        Função
+                        <button
+                          onClick={() => setIsFunctionFilterOpen(!isFunctionFilterOpen)}
+                          className={`p-1 rounded hover:bg-slate-700 transition-colors ${selectedFunctions.length !== allUniqueFunctions.length ? 'text-blue-400' : 'text-slate-400'}`}
+                        >
+                          <Filter className="w-3.5 h-3.5" />
+                        </button>
+
+                        {isFunctionFilterOpen && (
+                          <>
+                            <div className="fixed inset-0 z-20" onClick={() => setIsFunctionFilterOpen(false)} />
+                            <div className="absolute top-full left-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden">
+                              <div className="p-3 border-b border-slate-700 flex items-center justify-between bg-slate-800/50">
+                                <span className="text-xs font-bold text-slate-300 uppercase">Filtrar Funções</span>
+                                <button onClick={() => setIsFunctionFilterOpen(false)} className="text-slate-500 hover:text-slate-300">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                                <label className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                                  <input
+                                    type="checkbox"
+                                    className="accent-blue-500"
+                                    checked={selectedFunctions.length === allUniqueFunctions.length}
+                                    onChange={toggleAllFunctions}
+                                  />
+                                  <span className="text-xs text-slate-200 font-medium group-hover:text-blue-400">(Selecionar Tudo)</span>
+                                </label>
+                                <div className="h-px bg-slate-700 my-1 mx-2" />
+                                {allUniqueFunctions.map(func => (
+                                  <label key={func} className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                                    <input
+                                      type="checkbox"
+                                      className="accent-blue-500"
+                                      checked={selectedFunctions.includes(func)}
+                                      onChange={() => toggleFunctionFilter(func)}
+                                    />
+                                    <span className="text-xs text-slate-300 group-hover:text-slate-100">{func}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </th>
                     <th
                       className="px-3 py-4 text-left text-sm font-semibold text-slate-300 cursor-pointer hover:text-blue-400 transition-colors"
                       onClick={() => requestSort('arrival_date')}
@@ -363,7 +476,54 @@ export default function Refeicoes() {
                         )}
                       </div>
                     </th>
-                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">Status Refeição</th>
+                    <th className="px-3 py-4 text-left text-sm font-semibold text-slate-300">
+                      <div className="flex items-center gap-2 relative">
+                        Status Refeição
+                        <button
+                          onClick={() => setIsStatusFilterOpen(!isStatusFilterOpen)}
+                          className={`p-1 rounded hover:bg-slate-700 transition-colors ${selectedMealStatuses.length !== statuses.length ? 'text-blue-400' : 'text-slate-400'}`}
+                        >
+                          <Filter className="w-3.5 h-3.5" />
+                        </button>
+
+                        {isStatusFilterOpen && (
+                          <>
+                            <div className="fixed inset-0 z-20" onClick={() => setIsStatusFilterOpen(false)} />
+                            <div className="absolute top-full right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden text-left">
+                              <div className="p-3 border-b border-slate-700 flex items-center justify-between bg-slate-800/50">
+                                <span className="text-xs font-bold text-slate-300 uppercase">Filtrar Status</span>
+                                <button onClick={() => setIsStatusFilterOpen(false)} className="text-slate-500 hover:text-slate-300">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                                <label className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                                  <input
+                                    type="checkbox"
+                                    className="accent-blue-500"
+                                    checked={selectedMealStatuses.length === statuses.length}
+                                    onChange={toggleAllMealStatuses}
+                                  />
+                                  <span className="text-xs text-slate-200 font-medium group-hover:text-blue-400">(Selecionar Tudo)</span>
+                                </label>
+                                <div className="h-px bg-slate-700 my-1 mx-2" />
+                                {statuses.map(status => (
+                                  <label key={status.id} className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+                                    <input
+                                      type="checkbox"
+                                      className="accent-blue-500"
+                                      checked={selectedMealStatuses.includes(status.id)}
+                                      onChange={() => toggleMealStatusFilter(status.id)}
+                                    />
+                                    <span className="text-xs text-slate-300 group-hover:text-slate-100">{status.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -418,7 +578,7 @@ export default function Refeicoes() {
                 </div>
               </label>
             ))}
-            {displayed.length === 0 && <div className="text-center py-8 text-slate-500">Nenhum colaborador encontrado.</div>}
+            {displayed.length === 0 && <div className="text-center py-8 text-slate-500 font-medium bg-slate-800/20 rounded-xl border border-dashed border-slate-700">Nenhum colaborador encontrado com os filtros atuais.</div>}
           </div>
 
           {/* Action Buttons Bottom */}
@@ -438,6 +598,14 @@ export default function Refeicoes() {
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
             >
               ALOJAMENTO
+            </button>
+            <button
+              type="button"
+              onClick={() => setMealStatus("movimentacao")}
+              disabled={updating}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-all disabled:opacity-50"
+            >
+              MOVIMENTAÇÃO
             </button>
           </div>
         </div>
