@@ -297,7 +297,15 @@ export default function ListaFuncionarios() {
 
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Lista de Funcionários</h1>
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Lista de Funcionários</h1>
+                        <span className="px-2.5 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-sm font-semibold" title="Ativos">
+                            {displayedEmployees.filter(e => statuses.find(s => s.id === e.status_id)?.name !== "INATIVO").length}
+                        </span>
+                        <span className="px-2.5 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full text-sm font-semibold" title="Inativos">
+                            {displayedEmployees.filter(e => statuses.find(s => s.id === e.status_id)?.name === "INATIVO").length}
+                        </span>
+                    </div>
                     <p className="text-sm md:text-base text-slate-400 mt-1">Visualize e edite informações básicas</p>
                 </div>
             </div>

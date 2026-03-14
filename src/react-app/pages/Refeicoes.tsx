@@ -222,7 +222,7 @@ export default function Refeicoes() {
       const funcName = e.function_name || "Sem Função";
       const isFuncOk = selectedFunctions.length === 0 || selectedFunctions.includes(funcName);
 
-      const isMealStatusOk = selectedMealStatuses.length === 0 || selectedMealStatuses.includes(e.refeicao_status_id);
+      const isMealStatusOk = selectedMealStatuses.length === 0 || (e.refeicao_status_id != null && selectedMealStatuses.includes(e.refeicao_status_id));
 
       return nameOk && isStatusOk && isFuncOk && isMealStatusOk;
     });
