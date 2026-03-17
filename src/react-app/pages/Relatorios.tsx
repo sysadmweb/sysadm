@@ -57,6 +57,9 @@ export default function Relatorios() {
     const [employeeFilterType, setEmployeeFilterType] = useState<"todos" | "moi" | "mod">("todos");
     const [employeeSort, setEmployeeSort] = useState<"name" | "function">("name");
 
+    // State for integration report arrival date filter
+    const [integrationArrivalDate, setIntegrationArrivalDate] = useState<string>("");
+
 
 
     // ... (skipping unchanged code: PDF generators, etc) ...
@@ -566,37 +569,41 @@ export default function Relatorios() {
         return { employees, units, statusMap };
     };
 
-    const fetchIntegrationData = async () => {
+    const fetchIntegrationData = async (arrivalDate: string = "") => {
         const { isSuper, unitIds } = await fetchUserUnits();
 
-        // Get status ID for "TRABALHANDO DISPONIVEL"
-        const { data: statusData } = await supabase
-            .from("status")
-            .select("id")
-            .eq("name", "TRABALHANDO DISPONIVEL")
-            .single();
+        const [aguardandoRes, trabalhandoRes] = await Promise.all([
+            supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single()
+        ]);
 
-        if (!statusData) throw new Error("Status 'TRABALHANDO DISPONIVEL' not found");
+        const aguardandoId = aguardandoRes.data?.id;
+        const trabalhandoId = trabalhandoRes.data?.id;
+        const statusIds = [aguardandoId, trabalhandoId].filter(Boolean);
 
-        const [empRes, funcsRes, statusRes, unitsRes] = await Promise.all([
-            supabase.from("funcionarios")
-                .select("id, full_name, arrival_date, integration_date, function_id, status_id, unit_id, tamanho_marmita, refeicao_status_id")
-                .eq("is_active", true)
-                .eq("status_id", statusData.id),
-            supabase.from("funcoes").select("id, name").eq("is_active", true),
-            supabase.from("status").select("id, name").eq("is_active", true),
-            supabase.from("unidades").select("id, name").eq("is_active", true)
+        let query = supabase.from("funcionarios")
+            .select("id, full_name, arrival_date, integration_date, unit_id, status_id, function_id, tamanho_marmita")
+            .eq("is_active", true)
+            .in("status_id", statusIds);
+
+        if (arrivalDate) {
+            query = query.eq("arrival_date", arrivalDate);
+        }
+
+        const [empRes, funcsRes, statusRes] = await Promise.all([
+            query.order("arrival_date", { ascending: false }),
+            supabase.from("funcoes").select("*").eq("is_active", true),
+            supabase.from("status").select("id, name")
         ]);
 
         if (empRes.error) throw empRes.error;
         if (funcsRes.error) throw funcsRes.error;
         if (statusRes.error) throw statusRes.error;
-        if (unitsRes.error) throw unitsRes.error;
 
         let employees = empRes.data as Employee[] || [];
         const functions = funcsRes.data as Function[] || [];
         const statuses = statusRes.data as any[] || [];
-        const units = unitsRes.data as Unit[] || [];
+        const statusMap = new Map(statuses.map((s: any) => [s.id, s.name]));
 
         if (!isSuper && unitIds.length > 0) {
             employees = employees.filter(e => unitIds.includes(e.unit_id));
@@ -604,10 +611,93 @@ export default function Relatorios() {
             employees = [];
         }
 
-        const statusMap = new Map(statuses.map(s => [s.id, s.name]));
-
-        return { employees, functions, statuses, statusMap, units };
+        return { employees, functions, statusMap };
     };
+
+    const fetchDeactivatedIntegrationData = async () => {
+        const { isSuper, unitIds } = await fetchUserUnits();
+
+        // 1. Fetch deactivated employees
+        let deactivatedQuery = supabase.from("funcionarios")
+            .select("id, full_name, arrival_date, departure_date, integration_date, function_id, status_id, unit_id, tamanho_marmita")
+            .eq("is_active", false);
+
+        if (!isSuper && unitIds.length > 0) {
+            deactivatedQuery = deactivatedQuery.in("unit_id", unitIds);
+        } else if (!isSuper && unitIds.length === 0) {
+            deactivatedQuery = deactivatedQuery.is("id", null); // Return empty
+        }
+
+        // 2. Fetch transferred employees (history)
+        let transferQuery = supabase.from("funcionario_transferencia")
+            .select(`
+                id,
+                data_saida,
+                funcionario_id,
+                funcionario:funcionarios (id, full_name, function_id, tamanho_marmita),
+                unidade_atual:unidades!unidade_atual_id (name),
+                unidade_destino:unidades!unidade_destino_id (name)
+            `)
+            .order("data_saida", { ascending: false });
+
+        if (!isSuper && unitIds.length > 0) {
+            transferQuery = transferQuery.in("unidade_atual_id", unitIds);
+        } else if (!isSuper && unitIds.length === 0) {
+            transferQuery = transferQuery.is("id", null); // Return empty
+        }
+
+        const [deactivatedRes, transferRes, funcsRes, statusRes, unitsRes] = await Promise.all([
+            deactivatedQuery,
+            transferQuery,
+            supabase.from("funcoes").select("id, name").eq("is_active", true),
+            supabase.from("status").select("id, name").eq("is_active", true),
+            supabase.from("unidades").select("id, name").eq("is_active", true)
+        ]);
+
+        if (deactivatedRes.error) throw deactivatedRes.error;
+        if (transferRes.error) throw transferRes.error;
+        if (funcsRes.error) throw funcsRes.error;
+        if (statusRes.error) throw statusRes.error;
+        if (unitsRes.error) throw unitsRes.error;
+
+        const functions = funcsRes.data as Function[] || [];
+        const statuses = statusRes.data as any[] || [];
+        const statusMap = new Map(statuses.map(s => [s.id, s.name]));
+        const units = unitsRes.data as Unit[] || [];
+
+        // Combine data
+        // For deactivated, we list them as "DESATIVADO"
+        const deactivatedEmps = (deactivatedRes.data || []).map((emp: any) => ({
+            ...emp,
+            report_status: "DESATIVADO",
+            event_date: emp.departure_date || emp.updated_at
+        }));
+
+        // For transferred, we list them as "TRANSFERIDO" with destination info
+        const transferredEmps = (transferRes.data || []).map((t: any) => ({
+            id: t.funcionario?.id,
+            full_name: t.funcionario?.full_name,
+            function_id: t.funcionario?.function_id,
+            tamanho_marmita: t.funcionario?.tamanho_marmita,
+            unit_id: t.unidade_atual_id,
+            report_status: `TRANSFERIDO PARA ${t.unidade_destino?.name || "OUTRA UNIDADE"}`,
+            event_date: t.data_saida,
+            is_transfer: true
+        }));
+
+        // Use a Map to keep the most recent event for each employee if needed, 
+        // or just list all events. The user example suggests showing whom was transferred.
+        // Let's just combine them and sort by date.
+        const combined = [...deactivatedEmps, ...transferredEmps].sort((a, b) => {
+            if (!a.event_date && !b.event_date) return 0;
+            if (!a.event_date) return 1;
+            if (!b.event_date) return -1;
+            return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+        });
+
+        return { employees: combined, functions, statusMap, units };
+    };
+
 
     // --- PDF Generators ---
 
@@ -1146,6 +1236,88 @@ export default function Relatorios() {
         URL.revokeObjectURL(url);
     };
 
+    const generateDeactivatedIntegrationPDF = async (data: any) => {
+        const { employees, functions } = data;
+        if (employees.length === 0) {
+            showToast("Nenhum colaborador desativado ou transferido encontrado.", "error");
+            return;
+        }
+
+        const doc = new jsPDF();
+        const date = new Date().toLocaleDateString("pt-BR");
+        const logoDataUrl = await getSystemLogo();
+
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+        doc.setFontSize(18);
+        doc.text("RELATÓRIO DE INTEGRAÇÃO - DESATIVADOS", 50, 20);
+        doc.setFontSize(11);
+        const startX = 50;
+        let currentY = 30;
+        const lineHeight = 6;
+
+        doc.text(`Total: ${employees.length}`, startX, currentY);
+        currentY += lineHeight;
+        doc.text(`Data de Emissão: ${date}`, startX, currentY);
+
+        const tableData = employees.map((emp: any) => [
+            emp.event_date ? new Date(emp.event_date).toLocaleDateString("pt-BR") : "-",
+            emp.full_name || "-",
+            functions.find((f: Function) => f.id === emp.function_id)?.name || "-",
+            (emp.tamanho_marmita || "-"),
+            emp.report_status || "-",
+        ]);
+
+        autoTable(doc, {
+            startY: 45,
+            head: [["DATA EVENTO", "COLABORADOR", "FUNÇÃO", "TAM.", "SITUAÇÃO"]],
+            body: tableData,
+            styles: {
+                fontSize: 8,
+                halign: 'center',
+                valign: 'middle',
+                lineColor: [0, 0, 0],
+                lineWidth: 0.3,
+                cellPadding: 2
+            },
+            headStyles: {
+                fillColor: [192, 57, 43], // Reddish color for deactivated
+                textColor: 255,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            columnStyles: {
+                0: { cellWidth: 30 },
+                1: { halign: 'left' },
+                2: { cellWidth: 35 },
+                3: { cellWidth: 15 },
+                4: { cellWidth: 50, halign: 'left' }
+            }
+        });
+
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'relatorio_integracao_desativados.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleDownloadDeactivatedIntegrationPDF = async () => {
+        setLoadingReport("integration-deactivated");
+        try {
+            const data = await fetchDeactivatedIntegrationData();
+            await generateDeactivatedIntegrationPDF(data);
+            showToast("Download iniciado!", "success");
+        } catch (error) {
+            console.error(error);
+            showToast("Erro ao gerar PDF.", "error");
+        } finally {
+            setLoadingReport(null);
+            setSelectedReport(null);
+        }
+    };
+
     const generateEquipeTrabalhoPDF = async (data: any, shiftName: string) => {
         const { employees, units } = data;
         if (!employees || employees.length === 0) {
@@ -1342,7 +1514,14 @@ export default function Relatorios() {
                     }));
                 await generateLanchePDF({ ...data, adicionaisSelecao });
             } else if (selectedReport === "integration") {
-                data = await fetchIntegrationData();
+                data = await fetchIntegrationData(integrationArrivalDate);
+                if (!data.employees || data.employees.length === 0) {
+                    const msg = integrationArrivalDate
+                        ? `Nenhum colaborador chegou em ${new Date(integrationArrivalDate + 'T00:00:00').toLocaleDateString('pt-BR')}.`
+                        : "Nenhum colaborador encontrado.";
+                    showToast(msg, "error");
+                    return;
+                }
                 await generateIntegrationPDF(data);
             } else if (selectedReport === "dds") {
                 data = await fetchDDSData();
@@ -1642,6 +1821,7 @@ export default function Relatorios() {
                             onClick={() => {
                                 setSelectedReport(null);
                                 setIncludeAllStatuses(false);
+                                setIntegrationArrivalDate("");
                             }}
                             className="absolute top-4 right-4 text-slate-400 hover:text-white"
                         >
@@ -1980,7 +2160,32 @@ export default function Relatorios() {
                         {/* Integration Report */}
                         {selectedReport === "integration" ? (
                             <>
-                                <p className="text-slate-400 text-sm mb-6">Gerar PDF com lista de colaboradores trabalhando disponível:</p>
+                                {/* Arrival Date Filter */}
+                                <div className="mb-5 p-4 bg-slate-800/50 border border-cyan-500/20 rounded-lg">
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Filtrar por Data de Chegada</label>
+                                    <p className="text-xs text-slate-500 mb-2">Deixe em branco para exibir todos os colaboradores.</p>
+                                    <input
+                                        type="date"
+                                        value={integrationArrivalDate}
+                                        onChange={(e) => setIntegrationArrivalDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                                    />
+                                    {integrationArrivalDate && (
+                                        <button
+                                            onClick={() => setIntegrationArrivalDate("")}
+                                            className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 underline"
+                                        >
+                                            Limpar filtro
+                                        </button>
+                                    )}
+                                </div>
+
+                                <p className="text-slate-400 text-sm mb-4">
+                                    {integrationArrivalDate
+                                        ? `Exibindo colaboradores que chegaram em ${new Date(integrationArrivalDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+                                        : "Gerar PDF com todos os colaboradores trabalhando disponível:"}
+                                </p>
+
                                 <button
                                     onClick={handleDownloadPDF}
                                     disabled={loadingReport !== null}
@@ -1992,6 +2197,19 @@ export default function Relatorios() {
                                         <FileDown className="w-8 h-8 text-cyan-400" />
                                     )}
                                     <span className="text-slate-200 font-medium">Download PDF</span>
+                                </button>
+
+                                <button
+                                    onClick={handleDownloadDeactivatedIntegrationPDF}
+                                    disabled={loadingReport !== null}
+                                    className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all mt-4"
+                                >
+                                    {loadingReport === 'integration-deactivated' ? (
+                                        <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+                                    ) : (
+                                        <FileDown className="w-8 h-8 text-red-500" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">DESATIVADOS</span>
                                 </button>
                             </>
                         ) : null}
