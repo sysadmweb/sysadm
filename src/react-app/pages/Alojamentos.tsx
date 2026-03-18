@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Accommodation, Unit, Fornecedor } from "@/shared/types";
+import { Accommodation, Unit, Fornecedor, Status } from "@/shared/types";
 import { Plus, Edit, Trash2, Loader2, Home, Truck, X, Check } from "lucide-react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
@@ -23,10 +23,10 @@ export default function Alojamentos() {
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
   const [toast, setToast] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [showEmployeesModal, setShowEmployeesModal] = useState(false);
-  const [employeesForAccommodation, setEmployeesForAccommodation] = useState<{ id: number; full_name: string }[]>([]);
+  const [employeesForAccommodation, setEmployeesForAccommodation] = useState<{ id: number; full_name: string; refeicao_status_id?: number | null }[]>([]);
   const [selectedAccommodationForEmployees, setSelectedAccommodationForEmployees] = useState<Accommodation | null>(null);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
-  const [employeeMarks, setEmployeeMarks] = useState<Record<number, number>>({});
+  const [statuses, setStatuses] = useState<Status[]>([]);
 
   const showToast = (text: string, kind: "success" | "error") => {
     setToast({ text, kind });
@@ -39,7 +39,22 @@ export default function Alojamentos() {
     fetchUnits();
     fetchSuppliers();
     fetchEmployeeCounts();
+    fetchStatuses();
   }, []);
+
+  const fetchStatuses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("status")
+        .select("id, name, is_active")
+        .eq("is_active", true);
+      if (!error && data) {
+        setStatuses(data as Status[]);
+      }
+    } catch (error) {
+      console.error("Error fetching statuses:", error);
+    }
+  };
 
   const fetchConfig = async () => {
     const { data } = await supabase
@@ -241,7 +256,7 @@ export default function Alojamentos() {
       setSelectedAccommodationForEmployees(accommodation);
       const { data, error } = await supabase
         .from("funcionarios")
-        .select("id, full_name")
+        .select("id, full_name, refeicao_status_id")
         .eq("is_active", true)
         .eq("accommodation_id", accommodation.id)
         .order("full_name");
@@ -249,15 +264,44 @@ export default function Alojamentos() {
         showToast("Falha ao carregar colaboradores", "error");
         setEmployeesForAccommodation([]);
       } else {
-        setEmployeesForAccommodation(Array.isArray(data) ? (data as { id: number; full_name: string }[]) : []);
+        setEmployeesForAccommodation(Array.isArray(data) ? (data as { id: number; full_name: string; refeicao_status_id: number | null }[]) : []);
       }
-      setEmployeeMarks({});
       setShowEmployeesModal(true);
     } catch (error) {
       console.error("Error fetching employees for accommodation:", error);
       showToast("Erro ao carregar colaboradores", "error");
     } finally {
       setIsLoadingEmployees(false);
+    }
+  };
+
+  const handleEmployeeToggleStatus = async (empId: number, currentStatusId: number | null | undefined) => {
+    const obraStatusId = statuses.find((s) => s.name.toUpperCase() === "OBRA")?.id;
+    const alojStatusId = statuses.find((s) => s.name.toUpperCase() === "ALOJAMENTO")?.id;
+
+    let nextStatusId: number | null = null;
+    if (currentStatusId === alojStatusId) {
+      nextStatusId = obraStatusId || null;
+    } else if (currentStatusId === obraStatusId) {
+      nextStatusId = null;
+    } else {
+      nextStatusId = alojStatusId || null;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("funcionarios")
+        .update({ refeicao_status_id: nextStatusId })
+        .eq("id", empId);
+
+      if (error) throw error;
+
+      setEmployeesForAccommodation((prev) =>
+        prev.map((emp) => (emp.id === empId ? { ...emp, refeicao_status_id: nextStatusId } : emp))
+      );
+    } catch (err) {
+      console.error("Error updating employee status:", err);
+      showToast("Falha ao atualizar status", "error");
     }
   };
 
@@ -579,26 +623,33 @@ export default function Alojamentos() {
               <div className="text-slate-400 text-center py-6">Nenhum colaborador vinculado</div>
             ) : (
               <ul className="space-y-2 max-h-64 overflow-y-auto">
-                {employeesForAccommodation.map((emp) => (
-                  <li
-                    key={emp.id}
-                    onClick={() => setEmployeeMarks((prev) => ({ ...prev, [emp.id]: ((prev[emp.id] ?? 0) + 1) % 3 }))}
-                    className={`px-3 py-2 rounded border text-sm cursor-pointer select-none transition-colors ${employeeMarks[emp.id] === 1
-                      ? "bg-green-500/5 border-green-500/30 text-green-400"
-                      : employeeMarks[emp.id] === 2
-                        ? "bg-red-500/5 border-red-500/30 text-red-400"
-                        : "bg-slate-800 border-slate-700 text-slate-200"
-                      }`}
-                  >
-                    {emp.full_name}
-                  </li>
-                ))}
+                {employeesForAccommodation.map((emp) => {
+                  const obraStatusId = statuses.find((s) => s.name.toUpperCase() === "OBRA")?.id;
+                  const alojStatusId = statuses.find((s) => s.name.toUpperCase() === "ALOJAMENTO")?.id;
+                  const isAlojamento = emp.refeicao_status_id === alojStatusId;
+                  const isObra = emp.refeicao_status_id === obraStatusId;
+
+                  return (
+                    <li
+                      key={emp.id}
+                      onClick={() => handleEmployeeToggleStatus(emp.id, emp.refeicao_status_id)}
+                      className={`px-3 py-2 rounded border text-sm cursor-pointer select-none transition-colors ${isAlojamento
+                        ? "bg-green-500/5 border-green-500/30 text-green-400"
+                        : isObra
+                          ? "bg-red-500/5 border-red-500/30 text-red-400"
+                          : "bg-slate-800 border-slate-700 text-slate-200"
+                        }`}
+                    >
+                      {emp.full_name}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
-                onClick={() => { setShowEmployeesModal(false); setEmployeeMarks({}); }}
+                onClick={() => { setShowEmployeesModal(false); }}
                 className="flex-1 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-all"
               >
                 Fechar

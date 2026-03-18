@@ -274,13 +274,13 @@ export default function Relatorios() {
                 .select("id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
-                .in("status_id", statusIds);
+                .or(`refeicao_status_id.eq.${alojId}${statusIds.length > 0 ? `,status_id.in.(${statusIds.join(',')})` : ''}`);
         } else {
             employeeQuery = supabase.from("funcionarios")
                 .select("id, full_name, arrival_date, departure_date, integration_date, unit_id, accommodation_id, status_id, function_id, tamanho_marmita, is_active, created_at, updated_at")
                 .eq("is_active", true)
                 .not("accommodation_id", "is", null)
-                .or(`refeicao_status_id.eq.${alojId}${aguardandoId ? `,status_id.eq.${aguardandoId}` : ''}`);
+                .eq("refeicao_status_id", alojId);
         }
 
         const [accRes, empRes, adsRes] = await Promise.all([
