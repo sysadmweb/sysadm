@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { Employee, Status } from "@/shared/types";
-import { Search, Utensils, Loader2, CheckSquare, CreditCard, ChevronUp, ChevronDown, Filter, X } from "lucide-react";
+import { Search, Utensils, Loader2, CheckSquare, CreditCard, ChevronUp, ChevronDown, Filter, X, Home, RefreshCcw } from "lucide-react";
 
 // Calendar Component
 function WorkDaysCalendar() {
@@ -359,8 +359,52 @@ export default function Refeicoes() {
             />
           </div>
 
-          {/* Filter Buttons and Action Buttons on Same Row */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Mobile Stats Dashboard */}
+          <div className="md:hidden grid grid-cols-2 gap-3 mb-4">
+            <button
+              onClick={() => setFilterStatus("todos")}
+              className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${filterStatus === "todos"
+                ? "bg-blue-500/10 border-blue-500 shadow-lg shadow-blue-500/20"
+                : "bg-slate-800/50 border-slate-700 text-slate-400"
+                }`}
+            >
+              <span className="text-xs font-bold uppercase tracking-wider">Todos</span>
+              <span className="text-xl font-bold text-slate-100">{employees.length}</span>
+            </button>
+            <button
+              onClick={() => setFilterStatus("obra")}
+              className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${filterStatus === "obra"
+                ? "bg-green-500/10 border-green-500 shadow-lg shadow-green-500/20 text-green-400"
+                : "bg-slate-800/50 border-slate-700 text-slate-400"
+                }`}
+            >
+              <span className="text-xs font-bold uppercase tracking-wider">Obra</span>
+              <span className="text-xl font-bold text-slate-100">{obraCount}</span>
+            </button>
+            <button
+              onClick={() => setFilterStatus("alojamento")}
+              className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${filterStatus === "alojamento"
+                ? "bg-blue-600/10 border-blue-600 shadow-lg shadow-blue-600/20 text-blue-400"
+                : "bg-slate-800/50 border-slate-700 text-slate-400"
+                }`}
+            >
+              <span className="text-xs font-bold uppercase tracking-wider">Aloj.</span>
+              <span className="text-xl font-bold text-slate-100">{alojCount}</span>
+            </button>
+            <button
+              onClick={() => setFilterStatus("movimentacao")}
+              className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${filterStatus === "movimentacao"
+                ? "bg-amber-500/10 border-amber-500 shadow-lg shadow-amber-500/20 text-amber-400"
+                : "bg-slate-800/50 border-slate-700 text-slate-400"
+                }`}
+            >
+              <span className="text-xs font-bold uppercase tracking-wider">Movim.</span>
+              <span className="text-xl font-bold text-slate-100">{movimentacaoCount}</span>
+            </button>
+          </div>
+
+          {/* Desktop Filter Buttons */}
+          <div className="hidden md:flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setFilterStatus("todos")}
@@ -406,6 +450,15 @@ export default function Refeicoes() {
               <button onClick={clearAll} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-700 transition-all text-sm">
                 Limpar
               </button>
+            </div>
+          </div>
+
+          {/* Mobile Select/Clear Bar */}
+          <div className="md:hidden flex items-center justify-between pb-2 border-b border-slate-800/50">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{selectedIds.length} selecionados</span>
+            <div className="flex items-center gap-2">
+              <button onClick={selectAll} className="text-xs font-bold text-blue-400 px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 active:scale-95 transition-transform">Todos</button>
+              <button onClick={clearAll} className="text-xs font-bold text-slate-400 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 active:scale-95 transition-transform">Limpar</button>
             </div>
           </div>
 
@@ -558,31 +611,43 @@ export default function Refeicoes() {
           </div>
 
           {/* Mobile List */}
-          <div className="md:hidden space-y-2 max-h-[420px] overflow-y-auto">
-            {displayed.map((e: any) => (
-              <label key={e.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedIds.includes(e.id) ? "bg-blue-500/10 border-blue-500/50" : "bg-slate-800/50 border-slate-700/50 hover:bg-slate-800"}`}>
-                <input type="checkbox" className="accent-blue-500" checked={selectedIds.includes(e.id)} onChange={() => toggle(e.id)} />
-                <Utensils className="w-4 h-4 text-blue-400" />
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-slate-200 text-sm font-medium">{e.full_name}</span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${e.category === 'MOD' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'}`}>
-                      {e.category || '-'}
-                    </span>
+          <div className="md:hidden space-y-3 max-h-[500px] overflow-y-auto pb-24">
+            {displayed.map((e: any) => {
+              const currentStatus = statuses.find((s) => s.id === e.refeicao_status_id)?.name || "-";
+              const isObra = currentStatus.toUpperCase() === "OBRA";
+              const isAloj = currentStatus.toUpperCase() === "ALOJAMENTO";
+              const isMovim = currentStatus.toUpperCase().includes("MOVIMENTA");
+
+              return (
+                <label key={e.id} className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98] ${selectedIds.includes(e.id) ? "bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10" : "bg-slate-900/50 border-slate-800 hover:bg-slate-800/50"}`}>
+                  <div className="relative">
+                    <input type="checkbox" className="w-5 h-5 accent-blue-500 rounded-lg" checked={selectedIds.includes(e.id)} onChange={() => toggle(e.id)} />
                   </div>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-slate-400">{e.function_name || "-"}</span>
-                    <span className="text-slate-500">{e.arrival_date ? new Date(e.arrival_date + 'T00:00:00').toLocaleDateString('pt-BR') : "-"}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-1 flex-wrap gap-2">
+                      <span className="text-slate-100 text-sm font-bold truncate pr-3">{e.full_name}</span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border shadow-sm ${e.category === 'MOD' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-purple-500/10 border-purple-500/30 text-purple-400'}`}>
+                        {e.category || '-'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
+                      <span className="flex items-center gap-1"><Filter className="w-3 h-3" /> {e.function_name || "-"}</span>
+                      <span className="w-1 h-1 bg-slate-700 rounded-full"></span>
+                      <span>{e.arrival_date ? new Date(e.arrival_date + 'T00:00:00').toLocaleDateString('pt-BR') : "-"}</span>
+                    </div>
+                    <div className={`text-[10px] font-bold mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md ${isObra ? 'bg-green-500/10 text-green-400' : isAloj ? 'bg-blue-600/10 text-blue-400' : isMovim ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-500'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${isObra ? 'bg-green-500' : isAloj ? 'bg-blue-600' : isMovim ? 'bg-amber-500' : 'bg-slate-700'}`}></div>
+                      {currentStatus}
+                    </div>
                   </div>
-                  <div className="text-blue-400 font-bold text-[10px] mt-1">{statuses.find((s) => s.id === e.refeicao_status_id)?.name || "-"}</div>
-                </div>
-              </label>
-            ))}
-            {displayed.length === 0 && <div className="text-center py-8 text-slate-500 font-medium bg-slate-800/20 rounded-xl border border-dashed border-slate-700">Nenhum colaborador encontrado com os filtros atuais.</div>}
+                </label>
+              );
+            })}
+            {displayed.length === 0 && <div className="text-center py-12 text-slate-500 font-medium bg-slate-800/20 rounded-2xl border border-dashed border-slate-700">Nenhum colaborador encontrado com os filtros atuais.</div>}
           </div>
 
-          {/* Action Buttons Bottom */}
-          <div className="flex items-center gap-3 sticky bottom-0 bg-slate-900/60 backdrop-blur-sm py-3">
+          {/* Desktop Action Buttons */}
+          <div className="hidden md:flex items-center gap-3 sticky bottom-0 bg-slate-900/60 backdrop-blur-sm py-3">
             <button
               type="button"
               onClick={() => setMealStatus("obra")}
@@ -606,6 +671,37 @@ export default function Refeicoes() {
               className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-all disabled:opacity-50"
             >
               MOVIMENTAÇÃO
+            </button>
+          </div>
+
+          {/* Mobile Fixed Footer Actions */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-700 p-4 z-40 flex items-center justify-between gap-2 shadow-[0_-8px_30px_rgb(0,0,0,0.5)]">
+            <button
+              type="button"
+              onClick={() => setMealStatus("obra")}
+              disabled={updating || selectedIds.length === 0}
+              className="flex-1 py-3 bg-green-600 text-white text-xs font-bold rounded-xl hover:bg-green-700 active:scale-95 transition-all disabled:opacity-30 flex flex-col items-center gap-1"
+            >
+              <Utensils className="w-4 h-4" />
+              OBRA
+            </button>
+            <button
+              type="button"
+              onClick={() => setMealStatus("alojamento")}
+              disabled={updating || selectedIds.length === 0}
+              className="flex-1 py-3 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 flex flex-col items-center gap-1"
+            >
+              <Home className="w-4 h-4" />
+              ALOJ.
+            </button>
+            <button
+              type="button"
+              onClick={() => setMealStatus("movimentacao")}
+              disabled={updating || selectedIds.length === 0}
+              className="flex-1 py-3 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 active:scale-95 transition-all disabled:opacity-30 flex flex-col items-center gap-1"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              MOVIM.
             </button>
           </div>
         </div>

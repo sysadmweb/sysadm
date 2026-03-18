@@ -75,7 +75,15 @@ export default function ListarTransferencias() {
             const { data, error } = await query;
 
             if (error) throw error;
-            setTransfers((data as Transfer[]) || []);
+
+            const formatted = (data as any[] || []).map(item => ({
+                ...item,
+                funcionario: Array.isArray(item.funcionario) ? item.funcionario[0] : item.funcionario,
+                unidade_atual: Array.isArray(item.unidade_atual) ? item.unidade_atual[0] : item.unidade_atual,
+                unidade_destino: Array.isArray(item.unidade_destino) ? item.unidade_destino[0] : item.unidade_destino,
+            }));
+
+            setTransfers(formatted as Transfer[]);
         } catch (error) {
             console.error("Error fetching transfer history:", error);
         } finally {
