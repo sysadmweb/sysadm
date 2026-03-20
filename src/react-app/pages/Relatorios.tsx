@@ -57,8 +57,9 @@ export default function Relatorios() {
     const [employeeFilterType, setEmployeeFilterType] = useState<"todos" | "moi" | "mod">("todos");
     const [employeeSort, setEmployeeSort] = useState<"name" | "function">("name");
 
-    // State for integration report arrival date filter
     const [integrationArrivalDate, setIntegrationArrivalDate] = useState<string>("");
+    const [selectedFunctionsRelatorio, setSelectedFunctionsRelatorio] = useState<number[]>([]);
+    const [functions, setFunctions] = useState<Function[]>([]);
 
 
 
@@ -114,6 +115,14 @@ export default function Relatorios() {
                 .eq("ativo", true)
                 .order("nome");
             if (ads) setAvailableAdicionais(ads);
+
+            // Fetch Functions
+            const { data: funcs } = await supabase
+                .from("funcoes")
+                .select("*")
+                .eq("is_active", true)
+                .order("name");
+            if (funcs) setFunctions(funcs as Function[]);
         })();
     }, []);
 
@@ -698,6 +707,72 @@ export default function Relatorios() {
         return { employees: combined, functions, statusMap, units };
     };
 
+    const fetchRelatorioPorFuncaoData = async (functionIds: number[] = []) => {
+        const { isSuper, unitIds } = await fetchUserUnits();
+
+        const [aguardandoRes, trabalhandoRes, inativoRes] = await Promise.all([
+            supabase.from("status").select("id").eq("name", "AGUARDANDO INTEGRAÇÃO").single(),
+            supabase.from("status").select("id").eq("name", "TRABALHANDO DISPONIVEL").single(),
+            supabase.from("status").select("id").eq("name", "INATIVO").single(),
+        ]);
+
+        const statusIds = [
+            aguardandoRes.data?.id,
+            trabalhandoRes.data?.id,
+            inativoRes.data?.id
+        ].filter(Boolean);
+
+        let query = supabase.from("funcionarios")
+            .select("id, full_name, arrival_date, integration_date, unit_id, status_id, function_id, tamanho_marmita, is_active")
+            .in("status_id", statusIds);
+
+        if (functionIds.length > 0) {
+            query = query.in("function_id", functionIds);
+        }
+
+        const [empRes, funcsRes, statusRes, transferRes] = await Promise.all([
+            query.order("full_name"),
+            supabase.from("funcoes").select("*").eq("is_active", true),
+            supabase.from("status").select("id, name"),
+            supabase.from("funcionario_transferencia").select("funcionario_id, unidade_atual_id")
+        ]);
+
+        if (empRes.error) throw empRes.error;
+        if (funcsRes.error) throw funcsRes.error;
+        if (statusRes.error) throw statusRes.error;
+
+        let employees = empRes.data as Employee[] || [];
+        const functions = funcsRes.data as Function[] || [];
+        const statuses = statusRes.data as any[] || [];
+        const statusMap = new Map(statuses.map((s: any) => [s.id, s.name]));
+        const transfers = transferRes.data || [];
+
+        if (!isSuper && unitIds.length > 0) {
+            employees = employees.filter(e => unitIds.includes(e.unit_id));
+        } else if (!isSuper && unitIds.length === 0) {
+            employees = [];
+        }
+
+        // Exclude employees who were transferred FROM their current unit
+        // Usually, if they were transferred out, their unit_id would have changed.
+        // But to be safe and strictly follow "Menos os que foram transferidos da unidade",
+        // we can check if there's a recent transfer record where they left the current unit.
+        const transferredEmpIds = new Set(
+            transfers
+                .filter(t => unitIds.includes(t.unidade_atual_id))
+                .map(t => t.funcionario_id)
+        );
+
+        // However, if they are still in the unit but have a transfer record, 
+        // it means they were transferred FROM here at some point.
+        // Usually, a transfer record means they LEFT. 
+        // If they are back, it's a new arrival.
+        // Let's filter out those who have a transfer record corresponding to their current unit.
+        employees = employees.filter(e => !transferredEmpIds.has(e.id));
+
+        return { employees, functions, statusMap };
+    };
+
 
     // --- PDF Generators ---
 
@@ -736,7 +811,8 @@ export default function Relatorios() {
             currentY += lineHeight;
             doc.text(`Obra: ${unit?.name || '-'}`, startX, currentY);
             currentY += lineHeight;
-            doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+            const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+            doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
             autoTable(doc, {
                 startY: 55,
@@ -767,6 +843,53 @@ export default function Relatorios() {
         const link = document.createElement('a');
         link.href = url;
         link.download = 'relatorio_jornada.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const generateRelatorioFuncaoPDF = async (data: any, reportDate: string, functionNames: string) => {
+        const { employees, statusMap, functions } = data;
+        const doc = new jsPDF();
+        const logoDataUrl = await getSystemLogo();
+
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 14, 10, 30, 30);
+        doc.setFontSize(18);
+        doc.text("RELATÓRIO POR FUNÇÃO", 50, 20);
+        doc.setFontSize(11);
+        const startX = 50;
+        let currentY = 30;
+        const lineHeight = 6;
+
+        doc.text(`Funções: ${functionNames || "Todas"}`, startX, currentY);
+        currentY += lineHeight;
+        doc.text(`Total de Colaboradores: ${employees.length}`, startX, currentY);
+        currentY += lineHeight;
+        const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+        doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
+
+        const tableData = employees.map((emp: Employee) => [
+            emp.full_name || "-",
+            functions.find((f: Function) => f.id === emp.function_id)?.name || "-"
+        ]);
+
+        autoTable(doc, {
+            startY: 50,
+            head: [["COLABORADOR", "FUNÇÃO"]],
+            body: tableData,
+            theme: 'grid',
+            styles: { fontSize: 8, halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.3 },
+            headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+            columnStyles: {
+                0: { halign: 'left', cellWidth: 'auto' },
+                1: { halign: 'center', cellWidth: 70 }
+            },
+        });
+
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `relatorio_por_funcao_${functionNames.toLowerCase().replace(/\s+/g, '_') || 'geral'}.pdf`;
         link.click();
         URL.revokeObjectURL(url);
     };
@@ -883,7 +1006,8 @@ export default function Relatorios() {
         doc.setFontSize(11);
         const startX = 50;
         let currentY = 30;
-        doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+        const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+        doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
         const body = accommodations.map((acc: Accommodation) => {
             const counts = sizeCounts[acc.id] || { P: 0, M: 0, G: 0 };
@@ -986,7 +1110,8 @@ export default function Relatorios() {
         doc.setFontSize(11);
         const startX = 50;
         let currentY = 30;
-        doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+        const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+        doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
         const body = accommodations.map((acc: Accommodation) => [
             acc.name || "-",
@@ -1075,7 +1200,8 @@ export default function Relatorios() {
         doc.setFontSize(11);
         const startX = 50;
         let currentY = 30;
-        doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, startX, currentY);
+        const dateLabel = reportDate ? new Date(reportDate + 'T00:00:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR');
+        doc.text(`Data de Emissão: ${dateLabel}`, startX, currentY);
 
         currentY = 45;
 
@@ -1489,6 +1615,10 @@ export default function Relatorios() {
         try {
             let data;
             if (selectedReport === "jornada") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchJornadaData();
                 await generateJornadaPDF(data);
             } else if (selectedReport === "employees") {
@@ -1499,12 +1629,24 @@ export default function Relatorios() {
                 data = await fetchEmployeesData();
                 await generateEmployeesPDF(data, reportDate);
             } else if (selectedReport === "marmitas") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchMarmitasData(includeAllStatuses);
                 await generateMarmitasPDF(data);
             } else if (selectedReport === "cafe-da-manha") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchCafeDaManhaData(includeAllStatuses);
                 await generateCafeDaManhaPDF(data);
             } else if (selectedReport === "lanche") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchLancheData(includeAllStatuses);
                 const adicionaisSelecao = availableAdicionais
                     .filter(ad => selectedLancheAdicionais[ad.id] !== undefined)
@@ -1524,6 +1666,10 @@ export default function Relatorios() {
                 }
                 await generateIntegrationPDF(data);
             } else if (selectedReport === "dds") {
+                if (!reportDate) {
+                    showToast("Por favor, selecione uma data.", "error");
+                    return;
+                }
                 data = await fetchDDSData();
                 await generateDDSPDF(data);
             } else if (selectedReport === "equipe-trabalho-manha") {
@@ -1534,6 +1680,12 @@ export default function Relatorios() {
                 await generateEquipeTrabalhoPDF(data, "NOITE");
             } else if (selectedReport === "romaneio") {
                 await generateRomaneioPDF();
+            } else if (selectedReport === "relatorio-funcao") {
+                data = await fetchRelatorioPorFuncaoData(selectedFunctionsRelatorio);
+                const functionNames = selectedFunctionsRelatorio.length > 0 
+                    ? data.functions.filter(f => selectedFunctionsRelatorio.includes(f.id)).map(f => f.name).join(", ")
+                    : "Todas";
+                await generateRelatorioFuncaoPDF(data, reportDate, functionNames);
             }
             showToast("Download iniciado!", "success");
         } catch (error) {
@@ -1754,6 +1906,15 @@ export default function Relatorios() {
             color: "text-yellow-400",
             bg: "bg-yellow-500/10",
             border: "border-yellow-500/20"
+        },
+        {
+            id: "relatorio-funcao",
+            title: "Relatório por Função",
+            description: "Colaboradores por função e status (Trabalhando, Inativo, Aguardando).",
+            icon: Users,
+            color: "text-amber-400",
+            bg: "bg-amber-500/10",
+            border: "border-amber-500/20"
         }
     ];
 
@@ -1781,7 +1942,7 @@ export default function Relatorios() {
                         <h3 className="text-xl font-bold text-slate-200 mb-2">{report.title}</h3>
                         <p className="text-slate-400 text-sm mb-6 min-h-[40px]">{report.description}</p>
 
-                        {(report.id === "cafe-da-manha" || report.id === "lanche" || report.id === "marmitas" || report.id === "dds") && (
+                        {(report.id === "romaneio_placeholder" /* Removed from here to move to modal */) && (
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório</label>
                                 <input
@@ -1835,7 +1996,19 @@ export default function Relatorios() {
                         {/* Marmitas */}
                         {selectedReport === "marmitas" ? (
                             <>
-                                <p className="text-slate-400 text-sm mb-4">Escolha o tipo de refeição:</p>
+                                <p className="text-slate-400 text-sm mb-4">Escolha o tipo de refeição e a data:</p>
+
+                                {/* Date Selection for Marmitas */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
 
                                 {/* Checkbox for TODOS option */}
                                 <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
@@ -2035,6 +2208,18 @@ export default function Relatorios() {
                             <>
                                 <p className="text-slate-400 text-sm mb-4">Configurações do relatório:</p>
 
+                                {/* Date Selection for Cafe/Lanche */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
+
                                 {/* Supplier radio buttons — only if config is enabled and it's café */}
                                 {controlSuppliers && selectedReport === "cafe-da-manha" && cafeSuppliers.length > 0 && (
                                     <div className="mb-4 p-4 bg-slate-800/50 border border-purple-500/30 rounded-lg">
@@ -2217,6 +2402,18 @@ export default function Relatorios() {
                         {/* Jornada Report */}
                         {selectedReport === "jornada" ? (
                             <>
+                                <p className="text-slate-400 text-sm mb-4">Escolha a data do relatório:</p>
+                                {/* Date Selection for Jornada */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
                                 <p className="text-slate-400 text-sm mb-6">Gerar PDF com registro de jornadas:</p>
                                 <button
                                     onClick={handleDownloadPDF}
@@ -2236,6 +2433,18 @@ export default function Relatorios() {
                         {/* DDS Report */}
                         {selectedReport === "dds" ? (
                             <>
+                                <p className="text-slate-400 text-sm mb-4">Escolha a data do relatório:</p>
+                                {/* Date Selection for DDS */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
                                 <p className="text-slate-400 text-sm mb-6">Gerar PDF com lista de presença para DDS:</p>
                                 <button
                                     onClick={handleDownloadPDF}
@@ -2255,10 +2464,25 @@ export default function Relatorios() {
                         {/* EQUIPE DE TRABALHO Report */}
                         {selectedReport === "equipe-trabalho" ? (
                             <>
-                                <p className="text-slate-400 text-sm mb-6">Selecione o turno para o relatório:</p>
+                                <p className="text-slate-400 text-sm mb-4">Escolha a data e o turno:</p>
+                                {/* Date Selection for Equipe de Trabalho */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                    <input
+                                        type="date"
+                                        value={reportDate}
+                                        onChange={(e) => setReportDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                        required
+                                    />
+                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
                                         onClick={async () => {
+                                            if (!reportDate) {
+                                                showToast("Por favor, selecione uma data.", "error");
+                                                return;
+                                            }
                                             setLoadingReport("equipe-trabalho-manha");
                                             try {
                                                 const data = await fetchEquipeTrabalhoData("MANHÃ");
@@ -2285,6 +2509,10 @@ export default function Relatorios() {
 
                                     <button
                                         onClick={async () => {
+                                            if (!reportDate) {
+                                                showToast("Por favor, selecione uma data.", "error");
+                                                return;
+                                            }
                                             setLoadingReport("equipe-trabalho-noite");
                                             try {
                                                 const data = await fetchEquipeTrabalhoData("NOITE");
@@ -2309,6 +2537,80 @@ export default function Relatorios() {
                                         <span className="text-slate-200 font-medium">NOITE</span>
                                     </button>
                                 </div>
+                            </>
+                        ) : null}
+
+                        {/* Relatório por Função */}
+                        {selectedReport === "relatorio-funcao" ? (
+                            <>
+                                <p className="text-slate-400 text-sm mb-4">Selecione a função e a data:</p>
+                                
+                                <div className="space-y-4 mb-6">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-sm font-medium text-slate-300">Funções:</label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setSelectedFunctionsRelatorio(functions.map(f => f.id))}
+                                                    className="text-xs text-amber-500 hover:text-amber-400"
+                                                >
+                                                    Todas
+                                                </button>
+                                                <button
+                                                    onClick={() => setSelectedFunctionsRelatorio([])}
+                                                    className="text-xs text-slate-500 hover:text-slate-400"
+                                                >
+                                                    Limpar
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="max-h-48 overflow-y-auto p-3 bg-slate-800 border border-slate-700 rounded-lg space-y-2 custom-scrollbar">
+                                            {functions.map((f) => (
+                                                <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedFunctionsRelatorio.includes(f.id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedFunctionsRelatorio([...selectedFunctionsRelatorio, f.id]);
+                                                            } else {
+                                                                setSelectedFunctionsRelatorio(selectedFunctionsRelatorio.filter(id => id !== f.id));
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 accent-amber-500 cursor-pointer"
+                                                    />
+                                                    <span className="text-slate-300 text-sm group-hover:text-slate-100 transition-colors uppercase">
+                                                        {f.name}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Data do Relatório:</label>
+                                        <input
+                                            type="date"
+                                            value={reportDate}
+                                            onChange={(e) => setReportDate(e.target.value)}
+                                            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleDownloadPDF}
+                                    disabled={loadingReport !== null}
+                                    className="w-full flex items-center justify-center gap-3 p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all"
+                                >
+                                    {loadingReport === 'relatorio-funcao' ? (
+                                        <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                                    ) : (
+                                        <FileDown className="w-8 h-8 text-amber-500" />
+                                    )}
+                                    <span className="text-slate-200 font-medium">Gerar PDF</span>
+                                </button>
                             </>
                         ) : null}
 

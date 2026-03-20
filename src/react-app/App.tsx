@@ -31,6 +31,7 @@ import Devolucao from "@/react-app/pages/Devolucao";
 import Configuracoes from "@/react-app/pages/Configuracoes";
 import Adicionais from "@/react-app/pages/Adicionais";
 import Fornecedores from "@/react-app/pages/Fornecedores";
+import HistoricoFuncionario from "@/react-app/pages/HistoricoFuncionario";
 import Layout from "@/react-app/components/Layout";
 import RotaProtegida from "@/react-app/components/ProtectedRoute";
 
@@ -61,6 +62,7 @@ export default function App() {
                         <Route path="employees/list" element={<ListaFuncionarios />} />
                         <Route path="employees/transfer" element={<Transferencia />} />
                         <Route path="employees/transfers-list" element={<ListarTransferencias />} />
+                        <Route path="employees/history" element={<HistoricoFuncionario />} />
                         <Route path="inspection" element={<Vistorias />} />
                         <Route path="purchases/xml" element={<LancarXml />} />
                         <Route path="purchases/view" element={<VisualizarNotas />} />
