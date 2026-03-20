@@ -6,8 +6,6 @@ import {
     Building2, 
     ClipboardCheck, 
     ArrowRightLeft, 
-    Calendar, 
-    Clock, 
     Loader2,
     User,
     ChevronRight,
@@ -56,14 +54,12 @@ export default function HistoricoFuncionario() {
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
     const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isSearching, setIsSearching] = useState(true);
 
     useEffect(() => {
         fetchInitialData();
     }, []);
 
     const fetchInitialData = async () => {
-        setIsSearching(true);
         try {
             const [empRes, unitRes] = await Promise.all([
                 supabase.from("funcionarios").select("id, full_name, created_at, arrival_date, integration_date, unit_id").order("full_name"),
@@ -78,7 +74,6 @@ export default function HistoricoFuncionario() {
         } catch (error) {
             console.error("Error fetching initial data:", error);
         } finally {
-            setIsSearching(false);
         }
     };
 
@@ -269,7 +264,7 @@ export default function HistoricoFuncionario() {
 
                         {timelineEvents.length > 0 ? (
                             <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-blue-500/20 before:via-blue-500/50 before:to-transparent">
-                                {timelineEvents.map((event, index) => (
+                                {timelineEvents.map((event) => (
                                     <div key={event.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
                                         {/* Icon Container */}
                                         <div className="flex items-center justify-center w-10 h-10 rounded-full border border-slate-700 bg-slate-900 text-slate-300 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 relative z-10 transition-transform group-hover:scale-110">

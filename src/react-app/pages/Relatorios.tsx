@@ -848,7 +848,7 @@ export default function Relatorios() {
     };
 
     const generateRelatorioFuncaoPDF = async (data: any, reportDate: string, functionNames: string) => {
-        const { employees, statusMap, functions } = data;
+        const { employees, functions } = data;
         const doc = new jsPDF();
         const logoDataUrl = await getSystemLogo();
 
