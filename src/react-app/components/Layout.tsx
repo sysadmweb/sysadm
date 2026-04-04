@@ -85,6 +85,7 @@ export default function Layout() {
                 { path: "/employees/transfer", icon: UserCircle, label: "Transferência", key: "employees_transfer" },
                 { path: "/employees/transfers-list", icon: UserCircle, label: "Histórico de Transferências", key: "employees_transfers_list" },
                 { path: "/employees/history", icon: UserCircle, label: "Histórico de Funcionário", key: "employees_history" },
+                { path: "/employees/notice-period", icon: Clock, label: "Aviso Prévio", key: "employees_notice_period" },
 
             ],
         },

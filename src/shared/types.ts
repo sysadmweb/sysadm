@@ -213,6 +213,9 @@ export const EmployeeSchema = z.object({
   team: z.string().nullable().optional(),
   transferred_to_unit_id: z.number().nullable().optional(),
   transferred_arrival_date: z.string().nullable().optional(),
+  notice_start_date: z.string().nullable().optional(),
+  notice_type: z.string().nullable().optional(),
+  last_working_day: z.string().nullable().optional(),
   is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -228,6 +231,9 @@ export const CreateEmployeeSchema = z.object({
   status_id: z.number().nullable(),
   function_id: z.number().nullable(),
   tamanho_marmita: z.string().nullable().optional(),
+  notice_start_date: z.string().nullable().optional(),
+  notice_type: z.string().nullable().optional(),
+  last_working_day: z.string().nullable().optional(),
 });
 
 export const UpdateEmployeeSchema = z.object({
@@ -245,6 +251,9 @@ export const UpdateEmployeeSchema = z.object({
   team: z.string().nullable().optional(),
   transferred_to_unit_id: z.number().nullable().optional(),
   transferred_arrival_date: z.string().nullable().optional(),
+  notice_start_date: z.string().nullable().optional(),
+  notice_type: z.string().nullable().optional(),
+  last_working_day: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
 });
 

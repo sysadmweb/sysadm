@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/react-app/supabase";
-import { Save, Loader2, CreditCard, Image as ImageIcon, X, ChevronDown, ChevronRight, Settings, Truck } from "lucide-react";
+import { Save, Loader2, CreditCard, Image as ImageIcon, X, ChevronDown, ChevronRight, Settings, Truck, Clock } from "lucide-react";
 
 interface ConfigItem {
     id: number;
@@ -88,6 +88,7 @@ export default function Configuracoes() {
     const [controlSuppliers, setControlSuppliers] = useState(false);
     const [supplierCategoryRefeicao, setSupplierCategoryRefeicao] = useState("");
     const [supplierCategoryCafe, setSupplierCategoryCafe] = useState("");
+    const [noticePeriodDays, setNoticePeriodDays] = useState("");
     const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [selectingType, setSelectingType] = useState<"refeicao" | "cafe" | null>(null);
@@ -119,6 +120,7 @@ export default function Configuracoes() {
             setControlSuppliers(items.find(i => i.key === "control_suppliers")?.value === "true");
             setSupplierCategoryRefeicao(items.find(i => i.key === "supplier_category_refeicao")?.value || "");
             setSupplierCategoryCafe(items.find(i => i.key === "supplier_category_cafe")?.value || "");
+            setNoticePeriodDays(items.find(i => i.key === "notice_period_days")?.value || "23");
         } catch (error) {
             console.error("Error fetching configs:", error);
             showToast("Erro ao carregar configurações", "error");
@@ -153,7 +155,8 @@ export default function Configuracoes() {
                 { key: "system_logo", value: systemLogo || "" },
                 { key: "control_suppliers", value: String(controlSuppliers) },
                 { key: "supplier_category_refeicao", value: supplierCategoryRefeicao },
-                { key: "supplier_category_cafe", value: supplierCategoryCafe }
+                { key: "supplier_category_cafe", value: supplierCategoryCafe },
+                { key: "notice_period_days", value: noticePeriodDays }
             ];
             for (const update of updates) {
                 const { error } = await supabase
@@ -341,6 +344,29 @@ export default function Configuracoes() {
                         </div>
                     </div>
                 </SettingSection>
+
+                <SettingSection
+                    icon={Clock}
+                    title="Aviso Prévio"
+                    subtitle="Definição de prazos para desligamento"
+                    isOpen={openSection === "aviso_previo"}
+                    onToggle={() => setOpenSection(openSection === "aviso_previo" ? null : "aviso_previo")}
+                >
+                    <div className="space-y-6">
+                        <div className="space-y-3">
+                            <label className="text-sm font-medium text-slate-300">Dias de Aviso Prévio (Padrão)</label>
+                            <input
+                                type="number"
+                                value={noticePeriodDays}
+                                onChange={(e) => setNoticePeriodDays(e.target.value)}
+                                className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                                placeholder="Ex: 23"
+                            />
+                            <p className="text-xs text-slate-500">Define o número de dias padrão para o cálculo do último dia trabalhado no aviso prévio.</p>
+                        </div>
+                    </div>
+                </SettingSection>
+
             </div>
 
             {/* Category Selection Modal */}

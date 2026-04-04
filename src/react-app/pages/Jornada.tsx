@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { createWorker } from "tesseract.js";
 import { supabase } from "@/react-app/supabase";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { Loader2, Save, Calendar, Search, ChevronLeft, ChevronRight, Clock, MessageSquare, CheckSquare, Users } from "lucide-react";
+import { Loader2, Save, Calendar, Search, ChevronLeft, ChevronRight, Clock, MessageSquare, CheckSquare, Users, Camera, XCircle } from "lucide-react";
 import AlertModal from "../components/AlertModal";
 
 // --- Subcomponent: Calendar ---
@@ -161,6 +162,15 @@ export default function Jornada() {
         exit_time_2: "16:00",
         observation: ""
     });
+
+    // Scanner State
+    const [showScanner, setShowScanner] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
+    const [scannedEmps, setScannedEmps] = useState<number[]>([]);
+    const [scannerMsg, setScannerMsg] = useState("");
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const workerRef = useRef<any>(null);
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -408,6 +418,100 @@ export default function Jornada() {
         }));
     };
 
+    // --- OCR Scanner Logic ---
+    const startScanner = async () => {
+        setScannedEmps([]);
+        setShowScanner(true);
+        setScannerMsg("Iniciando câmera...");
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+            
+            workerRef.current = await createWorker('por');
+            setIsScanning(true);
+            setScannerMsg("Escaneando... Aponte para os nomes.");
+        } catch (err) {
+            console.error("Camera error:", err);
+            showToast("Erro ao acessar câmera.", "error");
+            setShowScanner(false);
+        }
+    };
+
+    const stopScanner = () => {
+        setIsScanning(false);
+        if (videoRef.current?.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+        }
+        if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
+        setShowScanner(false);
+    };
+
+    const processFrame = async () => {
+        if (!isScanning || !videoRef.current || !canvasRef.current || !workerRef.current) return;
+
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Draw frame to canvas
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        try {
+            const { data: { text } } = await workerRef.current.recognize(canvas);
+            const lines = text.split('\n');
+            const foundIds: number[] = [];
+
+            lines.forEach((line: string) => {
+                const cleanLine = line.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                if (cleanLine.length < 4) return;
+
+                const match = employees.find(emp => {
+                    const cleanName = emp.full_name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return cleanLine.includes(cleanName) || cleanName.includes(cleanLine);
+                });
+
+                if (match && !scannedEmps.includes(match.id)) {
+                    foundIds.push(match.id);
+                }
+            });
+
+            if (foundIds.length > 0) {
+                setScannedEmps(prev => [...prev, ...foundIds]);
+                // Automatically set 07:00 for new found IDs
+                const nextLocal = { ...localLogs };
+                foundIds.forEach(id => {
+                    nextLocal[id] = {
+                        ...(nextLocal[id] || {}),
+                        entry_time_1: "07:00"
+                    };
+                });
+                setLocalLogs(nextLocal);
+            }
+        } catch (err) {
+            console.error("OCR Frame error:", err);
+        }
+
+        // Loop
+        if (isScanning) {
+            setTimeout(processFrame, 1000);
+        }
+    };
+
+    useEffect(() => {
+        if (isScanning) {
+            processFrame();
+        }
+    }, [isScanning]);
+
     const filteredEmployees = employees.filter(emp => {
         const matchesSearch = emp.full_name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = categoryFilter === "TODOS" || emp.category === categoryFilter;
@@ -432,11 +536,20 @@ export default function Jornada() {
                     <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Jornada Diária</h1>
                     <p className="text-sm md:text-base text-slate-400 mt-1">Lançamento de horários por colaborador</p>
                 </div>
-                <div className="flex items-center gap-2 bg-slate-800/50 p-1.5 rounded-xl border border-slate-700/50">
-                    <Calendar className="w-4 h-4 text-blue-400 ml-2" />
-                    <span className="text-slate-200 font-medium px-2">
-                        {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </span>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={startScanner}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-blue-400 rounded-xl hover:bg-slate-700 transition-all border border-slate-700 font-bold shadow-lg"
+                    >
+                        <Camera className="w-5 h-5" />
+                        Scanner Presença
+                    </button>
+                    <div className="flex items-center gap-2 bg-slate-800/50 p-1.5 rounded-xl border border-slate-700/50">
+                        <Calendar className="w-4 h-4 text-blue-400 ml-2" />
+                        <span className="text-slate-200 font-medium px-2">
+                            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -809,6 +922,78 @@ export default function Jornada() {
                 message={alertMessage || ""}
                 onClose={() => setAlertMessage(null)}
             />
+
+            {/* Scanner Modal */}
+            {showScanner && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[100] flex flex-col items-center justify-center p-4">
+                    <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-blue-500/20 rounded-2xl animate-pulse">
+                                    <Camera className="w-6 h-6 text-blue-400" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-100">Scanner de Presença</h2>
+                                    <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{scannerMsg}</p>
+                                </div>
+                            </div>
+                            <button onClick={stopScanner} className="p-2 text-slate-500 hover:text-white transition-colors">
+                                <XCircle className="w-8 h-8" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-hidden relative bg-black flex items-center justify-center min-h-[300px]">
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-contain"
+                            />
+                            <canvas ref={canvasRef} className="hidden" />
+                            
+                            {/* Scanning Overlay */}
+                            <div className="absolute inset-0 border-2 border-blue-500/30 pointer-events-none">
+                                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan"></div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-900 border-t border-slate-800 space-y-4">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-widest px-1">
+                                <span>Colaboradores Identificados</span>
+                                <span className="text-blue-400">{scannedEmps.length} Encontrados</span>
+                            </div>
+
+                            <div className="h-32 overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                                {scannedEmps.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center text-slate-600 text-sm italic">
+                                        Aponte para a lista no tablet para começar...
+                                    </div>
+                                ) : (
+                                    scannedEmps.map(empId => {
+                                        const emp = employees.find(e => e.id === empId);
+                                        return (
+                                            <div key={empId} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700/50 animate-in slide-in-from-right duration-300">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
+                                                    <span className="text-sm font-bold text-slate-200">{emp?.full_name}</span>
+                                                </div>
+                                                <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-1 rounded-lg border border-green-500/20 font-bold uppercase">Entrada: 07:00</span>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+
+                            <button
+                                onClick={stopScanner}
+                                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:from-blue-500 hover:to-indigo-500 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98]"
+                            >
+                                Finalizar e Aplicar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
