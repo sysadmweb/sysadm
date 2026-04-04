@@ -171,6 +171,7 @@ export default function Jornada() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const workerRef = useRef<any>(null);
+    const scannedResultsRef = useRef<Set<string>>(new Set()); // id-time string set
 
     const showToast = (text: string, kind: "success" | "error") => {
         setToast({ text, kind });
@@ -421,6 +422,7 @@ export default function Jornada() {
     // --- OCR Scanner Logic ---
     const startScanner = async () => {
         setScannedEmps([]);
+        scannedResultsRef.current.clear();
         setShowScanner(true);
         setScannerMsg("Iniciando câmera...");
         try {
@@ -474,27 +476,57 @@ export default function Jornada() {
                 const cleanLine = line.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 if (cleanLine.length < 4) return;
 
+                // Look for Time (HH:mm)
+                const timeMatch = line.match(/(\d{1,2}:\d{2})/);
+                if (!timeMatch) return;
+                
+                let foundTime = timeMatch[1];
+                if (foundTime.length === 4) foundTime = "0" + foundTime; // 7:00 -> 07:00
+
                 const match = employees.find(emp => {
                     const cleanName = emp.full_name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                     return cleanLine.includes(cleanName) || cleanName.includes(cleanLine);
                 });
 
-                if (match && !scannedEmps.includes(match.id)) {
-                    foundIds.push(match.id);
+                if (match) {
+                    const resultKey = `${match.id}-${foundTime}`;
+                    if (!scannedResultsRef.current.has(resultKey)) {
+                        scannedResultsRef.current.add(resultKey);
+                        foundIds.push(match.id);
+                        
+                        // Smart fill for localLogs
+                        setLocalLogs(prev => {
+                            const empLog = prev[match.id] || {};
+                            let fieldToFill = "";
+                            
+                            // Find the first empty slot
+                            if (!empLog.entry_time_1) fieldToFill = "entry_time_1";
+                            else if (!empLog.exit_time_1) fieldToFill = "exit_time_1";
+                            else if (!empLog.entry_time_2) fieldToFill = "entry_time_2";
+                            else if (!empLog.exit_time_2) fieldToFill = "exit_time_2";
+                            
+                            if (!fieldToFill) return prev; // All filled
+                            
+                            return {
+                                ...prev,
+                                [match.id]: {
+                                    ...empLog,
+                                    [fieldToFill]: foundTime
+                                }
+                            };
+                        });
+                    }
                 }
             });
 
             if (foundIds.length > 0) {
-                setScannedEmps(prev => [...prev, ...foundIds]);
-                // Automatically set 07:00 for new found IDs
-                const nextLocal = { ...localLogs };
-                foundIds.forEach(id => {
-                    nextLocal[id] = {
-                        ...(nextLocal[id] || {}),
-                        entry_time_1: "07:00"
-                    };
+                setScannedEmps(prev => {
+                    const next = [...prev];
+                    foundIds.forEach(id => {
+                        if (!next.includes(id)) next.push(id);
+                    });
+                    return next;
                 });
-                setLocalLogs(nextLocal);
             }
         } catch (err) {
             console.error("OCR Frame error:", err);
@@ -977,7 +1009,10 @@ export default function Jornada() {
                                                     <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
                                                     <span className="text-sm font-bold text-slate-200">{emp?.full_name}</span>
                                                 </div>
-                                                <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-1 rounded-lg border border-green-500/20 font-bold uppercase">Entrada: 07:00</span>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-1 rounded-lg border border-green-500/20 font-bold uppercase">Capturado</span>
+                                                    <span className="text-[8px] text-slate-500 font-bold mt-1">Hórario detectado na linha</span>
+                                                </div>
                                             </div>
                                         );
                                     })
